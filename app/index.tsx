@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Text,
   TextInput,
   TouchableOpacity,
   View,
@@ -33,7 +34,10 @@ import {
 
 const Page = () => {
   const [code, setCode] = useState<number[]>([]);
-  const [userInput, setUserInput] = useState<string>("");
+  const [userInput, setUserInput] = useState({
+    name: "",
+    gender: "male",
+  });
   const codeLength = Array(6).fill(0);
   const MAX = codeLength.length;
   const router = useRouter();
@@ -47,9 +51,15 @@ const Page = () => {
     };
   });
 
+  const genre = [
+    { label: "Homme", value: "male" },
+    { label: "Femme", value: "female" },
+  ];
+
   const [user, setUser] = useState<UserProfile[]>([]);
 
   const refresh = async () => {
+    // await deleteUserProfile();
     console.log(await getUserProfile());
     setUser((await getUserProfile()) ?? []);
   };
@@ -101,11 +111,15 @@ const Page = () => {
   };
 
   const handleValidate = async () => {
-    if (userInput.trim().length === 0)
+    if (userInput.name.trim().length === 0)
       return alert("Le nom ne peut pas être vide.");
 
     setLoading(true);
-    await createOrUpdateUserProfile(code.join(""), userInput.trim())
+    await createOrUpdateUserProfile(
+      code.join(""),
+      userInput.name.trim(),
+      userInput.gender.trim(),
+    )
       .then(() => {
         router.navigate("/(tabs)");
         closeModal();
@@ -164,10 +178,71 @@ const Page = () => {
                     marginTop: 10,
                     color: color,
                   }}
-                  onChangeText={setUserInput}
-                  value={userInput}
+                  onChangeText={(text) =>
+                    setUserInput((prev) => ({ ...prev, name: text }))
+                  }
+                  value={userInput.name}
                   autoCapitalize="words"
                 />
+              </View>
+
+              <View>
+                <ThemedText
+                  style={{ fontFamily: "SemiBold", color: color, fontSize: 18 }}
+                >
+                  Genre
+                </ThemedText>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  {genre.map((g) => (
+                    <TouchableOpacity
+                      key={g.value}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
+                        marginTop: 10,
+                      }}
+                      onPress={() =>
+                        setUserInput((prev) => ({ ...prev, gender: g.value }))
+                      }
+                    >
+                      <Text> </Text>
+                      <View
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: color,
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        {userInput.gender === g.value && (
+                          <View
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: 6,
+                              backgroundColor: color,
+                            }}
+                          />
+                        )}
+                      </View>
+                      <ThemedText
+                        style={{ fontFamily: "Regular", color: color }}
+                      >
+                        {g.label}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
 
               <TouchableOpacity

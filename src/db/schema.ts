@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -90,5 +90,9 @@ export const migrations: Record<number, string[]> = {
       name TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`,
+  ],
+  2: [
+    // Example migration for version 2
+    `ALTER TABLE user_profile ADD COLUMN gender TEXT DEFAULT null;`,
   ],
 };

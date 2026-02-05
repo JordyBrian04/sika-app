@@ -1,15 +1,18 @@
+import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
+import { useThemeColor } from "@/hooks/use-theme-color";
 import { getUserProfile, UserProfile } from "@/src/db/repositories/userRepo";
 import { getConstante } from "@/src/services/AsyncStorage";
-import { AntDesign } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
   const [user, setUser] = useState<UserProfile[]>([]);
   const [showBudget, setShowBudget] = useState(false);
+  const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
 
   const getUser = async () => {
     console.log(await getUserProfile());
@@ -38,57 +41,42 @@ export default function HomeScreen() {
     return undefined;
   }
   return (
-    // <SafeAreaView style={{ flex: 1 }}>
-    <ThemedView style={{ flex: 1, gap: 22 }}>
-      {/* <ScrollView style={{ flex: 1, gap: 22, flexDirection: "column" }}> */}
-      <View
-        style={{
-          backgroundColor: COLORS.primary,
-          padding: 16,
-          paddingTop: 40,
-        }}
-      >
-        <Text style={{ fontFamily: "Regular", fontSize: 21, color: "#fff" }}>
-          Bienvenue,{" "}
-          <Text style={{ fontFamily: "Bold", fontSize: 21, color: "#fff" }}>
-            {user?.[0]?.name}
-          </Text>
-        </Text>
-        <View style={{ marginTop: 12 }}>
-          <Text
-            style={{
-              fontFamily: "BoldItalic",
-              fontSize: 13,
-              textAlign: "right",
-              color: "#fff",
-            }}
-          >
-            "La liberté financière commence par la sensibilisation et la
-            discipline."
-          </Text>
-        </View>
+    <SafeAreaView style={{ flex: 1 }}>
+      <ThemedView style={{ flex: 1, gap: 22 }} lightColor={COLORS.secondary}>
+        <ScrollView
+          style={{ flex: 1, gap: 22, flexDirection: "column", padding: 10 }}
+        >
+          <View>
+            <ThemedText
+              style={{
+                fontFamily: "Bold",
+                fontSize: 35,
+                color: COLORS.primary,
+              }}
+            >
+              S
+              <ThemedText style={{ fontFamily: "SemiBold", fontSize: 22 }}>
+                ika
+              </ThemedText>
+            </ThemedText>
 
-        <View style={{ marginTop: 30 }}>
-          <Text style={{ fontFamily: "Regular", fontSize: 15, color: "#fff" }}>
-            Budget du mois
-          </Text>
-          <TouchableOpacity
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Text style={{ fontFamily: "Bold", fontSize: 30, color: "#fff" }}>
-              165 000 CFA
-            </Text>
-            <AntDesign name="eye" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      {/* </ScrollView> */}
-    </ThemedView>
-    //</SafeAreaView>
+            <View>
+              <ThemedText style={{ fontFamily: "Regular", fontSize: 14 }}>
+                Bienvenue, {user[0]?.name}
+              </ThemedText>
+              <Image
+                source={
+                  user[0]?.gender === "male"
+                    ? require("../../assets/images/boy.png")
+                    : require("../../assets/images/woman.png")
+                }
+                style={{ width: 40, height: 40 }}
+              />
+            </View>
+          </View>
+        </ScrollView>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
