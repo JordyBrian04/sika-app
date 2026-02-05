@@ -50,7 +50,9 @@
           "faceIDPermission": "Autoriser l'authentification faciale pour déverrouiller l'application Sika App."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

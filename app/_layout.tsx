@@ -9,6 +9,9 @@ import "react-native-reanimated";
 
 import { UserInactivityProvider } from "@/context/UserInactivity";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import Toast from "@/src/ui/components/Toast";
+import { useEffect, useState } from "react";
+import { migrate } from "../src/db";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -16,6 +19,17 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    migrate()
+      .then(() => setReady(true))
+      .catch((e) => {
+        console.error("DB migrate error", e);
+      });
+  }, []);
+
+  if (!ready) return null;
 
   return (
     <UserInactivityProvider>
@@ -32,6 +46,7 @@ export default function RootLayout() {
             options={{ presentation: "modal", title: "Modal" }}
           />
         </Stack>
+        <Toast />
         <StatusBar style="auto" />
       </ThemeProvider>
     </UserInactivityProvider>

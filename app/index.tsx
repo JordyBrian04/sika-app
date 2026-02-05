@@ -1,13 +1,22 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
 import * as LocalAuthentification from "expo-local-authentication";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,12 +25,21 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  createOrUpdateUserProfile,
+  getUserProfile,
+  UserProfile,
+} from "../src/db/repositories/userRepo";
 
 const Page = () => {
   const [code, setCode] = useState<number[]>([]);
+  const [userInput, setUserInput] = useState<string>("");
   const codeLength = Array(6).fill(0);
+  const MAX = codeLength.length;
   const router = useRouter();
   const offset = useSharedValue(0);
+  const { openModal, closeModal, isVisible } = useModalQueue();
+  const [loading, setLoading] = useState(false);
 
   const style = useAnimatedStyle(() => {
     return {
@@ -29,14 +47,25 @@ const Page = () => {
     };
   });
 
+  const [user, setUser] = useState<UserProfile[]>([]);
+
+  const refresh = async () => {
+    console.log(await getUserProfile());
+    setUser((await getUserProfile()) ?? []);
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
 
   const OFFSET = 10;
   const TIME = 80;
 
   useEffect(() => {
-    if (code.length === 6) {
-      if (code.join("") === "123456") {
+    if (code.length === 6 && user.length > 0) {
+      if (code.join("") === user[0].pass) {
         router.navigate("/(tabs)");
         setCode([]);
       } else {
@@ -54,7 +83,7 @@ const Page = () => {
 
   const onNumberPress = (num: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCode((prev) => [...prev, num]);
+    setCode((prev) => (prev.length >= MAX ? prev : [...prev, num]));
   };
 
   const numberBackspace = () => {
@@ -70,6 +99,109 @@ const Page = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
+
+  const handleValidate = async () => {
+    if (userInput.trim().length === 0)
+      return alert("Le nom ne peut pas être vide.");
+
+    setLoading(true);
+    await createOrUpdateUserProfile(code.join(""), userInput.trim())
+      .then(() => {
+        router.navigate("/(tabs)");
+        closeModal();
+      })
+      .catch((e) => {
+        console.error("Error creating/updating user profile", e);
+        alert("Une erreur est survenue. Veuillez réessayer.");
+      })
+      .finally(() => setLoading(false));
+  };
+
+  function nameModal() {
+    return (
+      <Modal
+        visible={isVisible("nameModal")}
+        animationType="fade"
+        transparent
+        onRequestClose={closeModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.5)",
+            }}
+          >
+            <ThemedView
+              style={{
+                borderRadius: 10,
+                padding: 20,
+                width: "100%",
+                position: "absolute",
+                bottom: 0,
+                gap: 22,
+                paddingBottom: 70,
+              }}
+            >
+              <View>
+                <ThemedText
+                  style={{ fontFamily: "SemiBold", color: color, fontSize: 18 }}
+                >
+                  Entrez votre nom
+                </ThemedText>
+                <TextInput
+                  placeholder="Nom complet"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "gray",
+                    borderRadius: 10,
+                    padding: 12,
+                    marginTop: 10,
+                    color: color,
+                  }}
+                  onChangeText={setUserInput}
+                  value={userInput}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={{
+                  padding: 12,
+                  backgroundColor: color,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  opacity: loading ? 0.7 : 1,
+                }}
+                onPress={handleValidate}
+                disabled={loading}
+              >
+                <ThemedText
+                  style={{
+                    fontFamily: "SemiBold",
+                    color: color === "#FFFFFF" ? "#000000" : "#FFFFFF",
+                  }}
+                >
+                  {loading ? (
+                    <ActivityIndicator
+                      color={color === "#FFFFFF" ? "#000000" : "#FFFFFF"}
+                    />
+                  ) : (
+                    "Enregistrer"
+                  )}
+                </ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  }
 
   const [fontLoaded] = useFonts({
     Bold: require("../assets/fonts/Poppins-Bold.ttf"),
@@ -93,7 +225,10 @@ const Page = () => {
         }}
       >
         <ThemedText type="title" style={{ fontFamily: "Bold" }}>
-          Bienvenue Jordy Brian!
+          {user.length > 0
+            ? `Bienvenue ${user[0].name}!`
+            : "Créez un nouveau code"}
+          {/* Bienvenue {user.length > 0 ? user[0].name : "Jordy Brian"}! */}
         </ThemedText>
 
         <Animated.View
@@ -108,22 +243,26 @@ const Page = () => {
             style,
           ]}
         >
-          {codeLength.map((_, index) => (
-            <ThemedView
-              key={index}
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: 10,
-                backgroundColor: code[index] ? "rgb(77, 81, 77)" : "#D8DCE2",
-                // borderWidth: 1,
-                // borderColor: "gray",
-                // margin: 10,
-                // justifyContent: "center",
-                // alignItems: "center",
-              }}
-            ></ThemedView>
-          ))}
+          {codeLength.map((_, index) => {
+            // console.log(code, index, code[index]);
+            return (
+              <ThemedView
+                key={index}
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor:
+                    index < code.length ? "rgb(77, 81, 77)" : "#D8DCE2",
+                  // borderWidth: 1,
+                  // borderColor: "gray",
+                  // margin: 10,
+                  // justifyContent: "center",
+                  // alignItems: "center",
+                }}
+              ></ThemedView>
+            );
+          })}
         </Animated.View>
 
         <ThemedView style={{ gap: 50 }}>
@@ -219,20 +358,24 @@ const Page = () => {
               alignItems: "center",
             }}
           >
-            <TouchableOpacity
-              style={{
-                padding: 10,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-              onPress={onBiometricPress}
-            >
-              <MaterialCommunityIcons
-                name="face-recognition"
-                size={24}
-                color={color}
-              />
-            </TouchableOpacity>
+            <View style={{ minWidth: 30 }}>
+              {user.length > 0 && (
+                <TouchableOpacity
+                  style={{
+                    padding: 10,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                  onPress={onBiometricPress}
+                >
+                  <MaterialCommunityIcons
+                    name="face-recognition"
+                    size={24}
+                    color={color}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
 
             <TouchableOpacity
               style={{
@@ -267,7 +410,24 @@ const Page = () => {
             </View>
           </View>
         </ThemedView>
+
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 20 }}>
+          <TouchableOpacity
+            onPress={() => (user.length > 0 ? null : openModal("nameModal"))}
+          >
+            <ThemedText
+              style={{ fontSize: 16, fontFamily: "Regular", color: color }}
+            >
+              {user.length > 0
+                ? "Code oublié ?"
+                : code.length === 6
+                  ? "Enregistrer le code"
+                  : ""}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
       </ThemedView>
+      {nameModal()}
     </SafeAreaView>
   );
 };
