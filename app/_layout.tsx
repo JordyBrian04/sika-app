@@ -12,6 +12,14 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import Toast from "@/src/ui/components/Toast";
 import { useEffect, useState } from "react";
 import { migrate } from "../src/db";
+import { registerRecurringNotificationResponseListener } from "../src/notifications/recurringHandlers";
+import {
+  ensureNotificationPermissions,
+  rescheduleAllActiveRecurring,
+  setupRecurringNotificationCategory,
+} from "../src/notifications/recurringNotifications";
+import { runRecurringCatchUp } from "../src/services/recurring/catchup";
+import { toYYYYMMDD } from "../src/utils/date";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -27,6 +35,20 @@ export default function RootLayout() {
       .catch((e) => {
         console.error("DB migrate error", e);
       });
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      await ensureNotificationPermissions();
+      await setupRecurringNotificationCategory();
+      await rescheduleAllActiveRecurring();
+      await runRecurringCatchUp(toYYYYMMDD(new Date()));
+    })();
+
+    const sub = registerRecurringNotificationResponseListener(() =>
+      toYYYYMMDD(new Date()),
+    );
+    return () => sub.remove();
   }, []);
 
   if (!ready) return null;

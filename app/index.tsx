@@ -3,7 +3,6 @@ import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
 import * as LocalAuthentification from "expo-local-authentication";
 import { useRouter } from "expo-router";
@@ -278,16 +277,16 @@ const Page = () => {
     );
   }
 
-  const [fontLoaded] = useFonts({
-    Bold: require("../assets/fonts/Poppins-Bold.ttf"),
-    BoldItalic: require("../assets/fonts/Poppins-BoldItalic.ttf"),
-    SemiBold: require("../assets/fonts/Poppins-SemiBold.ttf"),
-    Regular: require("../assets/fonts/Poppins-Regular.ttf"),
-  });
+  // const [fontLoaded] = useFonts({
+  //   Bold: require("../assets/fonts/Poppins-Bold.ttf"),
+  //   BoldItalic: require("../assets/fonts/Poppins-BoldItalic.ttf"),
+  //   SemiBold: require("../assets/fonts/Poppins-SemiBold.ttf"),
+  //   Regular: require("../assets/fonts/Poppins-Regular.ttf"),
+  // });
 
-  if (!fontLoaded) {
-    return undefined;
-  }
+  // if (!fontLoaded) {
+  //   return undefined;
+  // }
 
   return (
     <SafeAreaView style={{ flex: 1 }}>

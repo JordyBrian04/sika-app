@@ -72,20 +72,27 @@ export async function migrate() {
   );
   const currentVersion = current?.user_version ?? 0;
 
-  if (currentVersion >= DB_VERSION) return;
+  console.log(
+    `Current DB version: ${currentVersion}, app requires: ${DB_VERSION}`,
+  );
 
-  for (let v = currentVersion + 1; v <= DB_VERSION; v++) {
-    const steps = migrations[v];
-    if (!steps) continue;
+  if (currentVersion < DB_VERSION) {
+    for (let v = currentVersion + 1; v <= DB_VERSION; v++) {
+      const steps = migrations[v];
+      if (!steps) continue;
 
-    for (const step of steps) {
-      await runSql(step);
+      for (const step of steps) {
+        await runSql(step);
+      }
+      await runSql(`PRAGMA user_version = ${v};`);
     }
-    await runSql(`PRAGMA user_version = ${v};`);
   }
 
-  // seed minimal default data
-  await seedDefaults();
+  if (__DEV__) {
+    // seed minimal default data
+    // await runSql("DELETE FROM categories;"); // reset categories (for dev/testing)
+    await seedDefaults();
+  }
 }
 
 async function seedDefaults() {
@@ -93,17 +100,20 @@ async function seedDefaults() {
   const row = await getOne<{ c: number }>(
     "SELECT COUNT(*) as c FROM categories;",
   );
+  console.log("Categories count:", row?.c);
   if ((row?.c ?? 0) > 0) return;
 
   const defaults = [
     ["Alimentation", "depense"],
     ["Transport", "depense"],
-    ["Loyer", "depense"],
-    ["Factures", "depense"],
-    ["Abonnements", "depense"],
+    ["Loyer", "event"],
+    ["Factures", "event"],
+    ["Abonnements", "event"],
     ["Santé", "depense"],
     ["Loisirs", "depense"],
     ["Salaire", "entree"],
+    ["Fond de depart", "entree"],
+    ["Frais mission", "entree"],
     ["Autres revenus", "entree"],
   ];
 

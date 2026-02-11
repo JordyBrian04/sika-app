@@ -35,3 +35,21 @@ export async function createOrUpdateUserProfile(
     );
   }
 }
+
+// Ajouter une dépense : +5 XP
+
+// Ajouter un revenu : +3 XP
+
+// Créer un budget : +15 XP
+
+// Ajouter une récurrence : +10 XP
+
+// Créer un objectif épargne : +10 XP
+
+// Ajouter une épargne : +5 XP
+
+// Bonus “discipline”
+
+// Budget du mois non dépassé (fin du mois) : +60 XP
+
+// 7 jours consécutifs (au moins 1 transaction/jour) : +20 XP (optionnel)
