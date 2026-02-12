@@ -5,12 +5,14 @@ import {
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Host } from "react-native-portalize";
 import "react-native-reanimated";
 
 import { UserInactivityProvider } from "@/context/UserInactivity";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import Toast from "@/src/ui/components/Toast";
 import { useEffect, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { migrate } from "../src/db";
 import { registerRecurringNotificationResponseListener } from "../src/notifications/recurringHandlers";
 import {
@@ -55,22 +57,28 @@ export default function RootLayout() {
 
   return (
     <UserInactivityProvider>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="(modals)/white"
-            options={{ headerShown: false, animation: "none" }}
-          />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="modal"
-            options={{ presentation: "modal", title: "Modal" }}
-          />
-        </Stack>
-        <Toast />
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Host>
+          <ThemeProvider
+            value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+          >
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="(modals)/white"
+                options={{ headerShown: false, animation: "none" }}
+              />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="modal"
+                options={{ presentation: "modal", title: "Modal" }}
+              />
+            </Stack>
+            <Toast />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </Host>
+      </GestureHandlerRootView>
     </UserInactivityProvider>
   );
 }

@@ -2,6 +2,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import GaugeHalfCircle from "@/src/components/GaugeCard";
 import { CategoryInput, listeCategories } from "@/src/db/repositories/category";
 import {
@@ -14,10 +15,13 @@ import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PlatformPressable } from "@react-navigation/elements";
+import { useFonts } from "expo-font";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import * as SplashScreen from "expo-splash-screen";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -36,6 +40,8 @@ import Animated, {
   LinearTransition,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const AnimatedPressable = Animated.createAnimatedComponent(PlatformPressable);
 
@@ -94,7 +100,7 @@ export default function HomeScreen() {
     created_at: new Date().toISOString(),
     name: "",
     frequency: "semaine" as Frequency,
-    interval_count: 1,
+    interval_count: "1",
     next_date: new Date().toISOString().substring(0, 10),
     remind_days_before: 2,
     active: 1,
@@ -106,6 +112,8 @@ export default function HomeScreen() {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(new Date());
   const [keyReset, setKeyReset] = useState(0);
+  const ref = useRef<BottomSheetRefProps>(null);
+  const [openSheet, setOpenSheet] = useState(false);
 
   const OPTIONS = [
     { key: "entree", label: "Entrée" },
@@ -118,6 +126,28 @@ export default function HomeScreen() {
     month: "long",
     day: "numeric",
   };
+
+  // const openLow = () => ref.current?.scrollTo("low");
+  // const openMid = () => ref.current?.scrollTo("mid");
+  // const openHigh = () => ref.current?.scrollTo("high");
+  // const closeSheet = () => ref.current?.scrollTo("closed");
+
+  // const showModal = useCallback(async () => {
+  //   setOpenSheet(true);
+  //   ref.current?.scrollTo("high");
+  // }, []);
+
+  // const hideModal = useCallback(async () => {
+  //   setOpenSheet(false);
+  //   ref.current?.scrollTo("closed");
+  // }, []);
+
+  const toggleSheet = useCallback(() => {
+    const isActive = ref.current?.isActive?.();
+    ref.current?.scrollTo(isActive ? SCREEN_HEIGHT : -500);
+  }, []);
+
+  const ScrollViewRef = useRef<ScrollView>(null);
 
   const toggleDatePicker = () => {
     setOpen(!open);
@@ -198,7 +228,7 @@ export default function HomeScreen() {
       created_at: new Date().toISOString(),
       name: "",
       frequency: "semaine",
-      interval_count: 1,
+      interval_count: "1",
       next_date: new Date().toISOString().substring(0, 10),
       remind_days_before: 2,
       active: 1,
@@ -263,6 +293,9 @@ export default function HomeScreen() {
   };
 
   const handleTypeChange = (type: TransactionType) => {
+    type === "event"
+      ? ref.current?.scrollTo(-700)
+      : ref.current?.scrollTo(-500);
     setKeyReset((prev) => prev + 1);
     setTransactionData({ ...transactionData, type: type, category_id: 0 });
     setOption(type);
@@ -278,13 +311,20 @@ export default function HomeScreen() {
     return (
       <Modal
         visible={isVisible("transactionModal")}
-        animationType="fade"
+        animationType="slide"
         transparent
         onRequestClose={closeModal}
       >
         <KeyboardAvoidingView
+          style={{
+            flex: 1,
+            maxHeight: 600,
+            position: "absolute",
+            bottom: 0,
+            width: "100%",
+            zIndex: 999999,
+          }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1, justifyContent: "flex-end" }}
         >
           <View
             style={{
@@ -294,363 +334,304 @@ export default function HomeScreen() {
               backgroundColor: "rgba(0,0,0,0.5)",
             }}
           >
-            <ThemedView
+            <View
               style={{
                 borderTopEndRadius: 24,
                 borderTopStartRadius: 24,
-                padding: 20,
-                width: "100%",
                 position: "absolute",
                 bottom: 0,
-                gap: 22,
-                paddingBottom: 70,
+                // padding: 20,
+                // width: "100%",
+                // gap: 22,
+                // paddingBottom: Platform.OS === "ios" ? 40 : 20, // Ajustement dynamique
+                maxHeight: SCREEN_HEIGHT * 0.9,
+                backgroundColor:
+                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
               }}
             >
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  backgroundColor: COLORS.secondary,
-                  // padding: 10,
-                  borderRadius: 50,
-                  alignItems: "center",
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={{
+                  padding: 20,
+                  gap: 22,
+                  paddingBottom: Platform.OS === "ios" ? 60 : 30,
                 }}
               >
-                {OPTIONS.map((opt: any) => (
-                  <AnimatedPressable
-                    layout={LinearTransition.springify().mass(0.5)}
-                    key={opt.key}
-                    style={{
-                      alignItems: "center",
-                      padding: 12,
-                      borderRadius: 25,
-                      backgroundColor:
-                        option === opt.key ? COLORS.dark : "transparent",
-                    }}
-                    onPress={() => handleTypeChange(opt.key)}
-                  >
-                    <Animated.Text
-                      entering={FadeIn.duration(200)}
-                      exiting={FadeOut.duration(200)}
-                      style={{
-                        fontFamily: option === opt.key ? "SemiBold" : "Regular",
-                        color: option === opt.key ? COLORS.white : COLORS.dark,
-                      }}
-                    >
-                      {opt.label}
-                    </Animated.Text>
-                  </AnimatedPressable>
-                ))}
-              </View>
-
-              <View
-                style={{
-                  gap: 8,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <ThemedText style={{ fontFamily: "Regular" }}>
-                  Montant (CFA)
-                </ThemedText>
-                <TextInput
-                  placeholder="0"
-                  keyboardType="numeric"
+                <View
                   style={{
-                    fontFamily: "Bold",
-                    fontSize: 24,
-                    width: "100%",
-                    color: color,
-                    textAlign: "center",
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    backgroundColor: COLORS.secondary,
+                    // padding: 10,
+                    borderRadius: 50,
+                    alignItems: "center",
                   }}
-                  placeholderTextColor={color}
-                  onChangeText={(e) =>
-                    setTransactionData({
-                      ...transactionData,
-                      amount: e,
-                    })
-                  }
-                  value={transactionData.amount}
-                />
-              </View>
-
-              {transactionData.type !== "event" && (
-                <>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      // width: "100%",
-                      justifyContent: "center",
-                      gap: 12,
-                    }}
-                  >
-                    <SelectList
-                      data={categories}
-                      key={keyReset}
-                      setSelected={(val: string) =>
-                        setTransactionData({
-                          ...transactionData,
-                          category_id: parseInt(val),
-                        })
-                      }
-                      placeholder="Choisir une catégorie"
-                      inputStyles={{ color: color }}
-                      searchPlaceholder="Entrez une catégorie"
-                      dropdownTextStyles={{ color: color }}
-                      closeicon={
-                        <Ionicons name="close" size={18} color={color} />
-                      }
-                      searchicon={
-                        <Ionicons name="search" size={18} color={color} />
-                      }
-                      arrowicon={
-                        <Feather name="chevron-down" size={24} color={color} />
-                      }
-                      save="key"
-                    />
-
-                    <View
-                      style={
-                        {
-                          // flexDirection: "row",
-                          // alignItems: "center",
-                          // width: "70%",
-                          // justifyContent: "space-between",
-                        }
-                      }
+                >
+                  {OPTIONS.map((opt: any) => (
+                    <AnimatedPressable
+                      layout={LinearTransition.springify().mass(0.5)}
+                      key={opt.key}
+                      style={{
+                        alignItems: "center",
+                        padding: 12,
+                        borderRadius: 25,
+                        backgroundColor:
+                          option === opt.key ? COLORS.dark : "transparent",
+                      }}
+                      onPress={() => handleTypeChange(opt.key)}
                     >
-                      {open && (
-                        <DateTimePicker
-                          mode="date"
-                          display="spinner"
-                          value={date}
-                          onChange={onChange}
-                          style={{ height: 120, marginTop: 20, width: "100%" }}
-                          textColor="#000"
-                        />
-                      )}
+                      <Animated.Text
+                        entering={FadeIn.duration(200)}
+                        exiting={FadeOut.duration(200)}
+                        style={{
+                          fontFamily:
+                            option === opt.key ? "SemiBold" : "Regular",
+                          color:
+                            option === opt.key ? COLORS.white : COLORS.dark,
+                        }}
+                      >
+                        {opt.label}
+                      </Animated.Text>
+                    </AnimatedPressable>
+                  ))}
+                </View>
 
-                      {open && Platform.OS === "ios" && (
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "space-around",
-                            marginBottom: 20,
-                          }}
-                        >
-                          <TouchableOpacity
-                            style={{
-                              padding: 10,
-                              backgroundColor: "gray",
-                              borderRadius: 10,
-                            }}
-                            onPress={toggleDatePicker}
-                          >
-                            <Text
-                              style={{ color: "black", fontWeight: "bold" }}
-                            >
-                              Annuler
-                            </Text>
-                          </TouchableOpacity>
+                <View
+                  style={{
+                    gap: 8,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ThemedText style={{ fontFamily: "Regular" }}>
+                    Montant (CFA)
+                  </ThemedText>
+                  <TextInput
+                    placeholder="0"
+                    keyboardType="numeric"
+                    style={{
+                      fontFamily: "Bold",
+                      fontSize: 24,
+                      width: "100%",
+                      color: color,
+                      textAlign: "center",
+                    }}
+                    placeholderTextColor={color}
+                    onChangeText={(e) =>
+                      setTransactionData({
+                        ...transactionData,
+                        amount: e,
+                      })
+                    }
+                    value={transactionData.amount}
+                  />
+                </View>
 
-                          <TouchableOpacity
-                            style={{
-                              padding: 10,
-                              backgroundColor: "gray",
-                              borderRadius: 10,
-                            }}
-                            onPress={confirmIOSDate}
-                          >
-                            <Text
-                              style={{ color: "black", fontWeight: "bold" }}
-                            >
-                              Valider
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-
-                      {!open && (
-                        <TouchableOpacity onPress={toggleDatePicker}>
-                          <TextInput
-                            placeholder="Date debut"
-                            placeholderTextColor="#000"
-                            style={{
-                              borderWidth: 1,
-                              borderColor: "gray",
-                              padding: 10,
-                              borderRadius: 10,
-                              color: color,
-                              height: 52,
-                              width: 145,
-                            }}
-                            editable={false}
-                            value={transactionData.date}
-                            onChangeText={(e: any) =>
-                              setTransactionData({
-                                ...transactionData,
-                                date: e,
-                              })
-                            }
-                            onPressIn={toggleDatePicker}
-                          />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-
-                  <View>
-                    <ThemedText style={{ fontFamily: "SemiBold" }}>
-                      Note
-                    </ThemedText>
-                    <TextInput
-                      multiline
-                      placeholder="Ajouter une note"
-                      placeholderTextColor={color}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: "gray",
-                        padding: 13,
-                        borderRadius: 10,
-                        color: color,
-                        marginTop: 8,
-                        textAlignVertical: "top",
-                        height: 100,
-                        fontFamily: "Regular",
-                      }}
-                      onChangeText={(e) =>
-                        setTransactionData({ ...transactionData, note: e })
-                      }
-                    />
-                  </View>
-                </>
-              )}
-
-              {transactionData.type === "event" && (
-                <>
-                  <View>
-                    <ThemedText style={{ fontFamily: "SemiBold" }}>
-                      Nom ou description de la charge
-                    </ThemedText>
-                    <TextInput
-                      placeholder="Ex: Loyer, électricité..."
-                      placeholderTextColor={
-                        color === "#FFFFFF" ? COLORS.gray : COLORS.dark
-                      }
-                      style={{
-                        borderWidth: 1,
-                        borderColor: "gray",
-                        padding: 13,
-                        borderRadius: 10,
-                        color: color,
-                        marginTop: 8,
-                        textAlignVertical: "top",
-                        fontFamily: "Regular",
-                      }}
-                      value={transactionData.name}
-                      onChangeText={(e) =>
-                        setTransactionData({ ...transactionData, name: e })
-                      }
-                    />
-                  </View>
-                  <View style={{ gap: 8 }}>
-                    <ThemedText style={{ fontFamily: "SemiBold" }}>
-                      Catégorie
-                    </ThemedText>
-                    <SelectList
-                      data={categories}
-                      key={keyReset}
-                      setSelected={(val: string) =>
-                        setTransactionData({
-                          ...transactionData,
-                          category_id: parseInt(val),
-                        })
-                      }
-                      placeholder="Choisir une catégorie"
-                      inputStyles={{ color: color }}
-                      searchPlaceholder="Entrez une catégorie"
-                      dropdownTextStyles={{ color: color }}
-                      closeicon={
-                        <Ionicons name="close" size={18} color={color} />
-                      }
-                      searchicon={
-                        <Ionicons name="search" size={18} color={color} />
-                      }
-                      arrowicon={
-                        <Feather name="chevron-down" size={24} color={color} />
-                      }
-                      save="key"
-                    />
-                  </View>
-                  <View style={{ gap: 8 }}>
-                    <ThemedText style={{ fontFamily: "SemiBold" }}>
-                      Fréquence (chaque :)
-                    </ThemedText>
+                {transactionData.type !== "event" && (
+                  <>
                     <View
                       style={{
                         flexDirection: "row",
-                        gap: 12,
                         alignItems: "center",
+                        // width: "100%",
+                        justifyContent: "center",
+                        gap: 12,
                       }}
                     >
                       <SelectList
-                        data={interval.map((f) => ({
-                          key: f,
-                          value: f,
-                        }))}
-                        // key={keyReset}
-                        setSelected={(val: string) =>
-                          setTransactionData({
-                            ...transactionData,
-                            interval_count: parseInt(val),
-                          })
-                        }
-                        placeholder="Choisir une intervalle"
-                        inputStyles={{ color: color, width: "50%" }}
-                        boxStyles={{
-                          width: "50%",
-                        }}
-                        searchPlaceholder="Entrez une intervalle"
-                        dropdownTextStyles={{ color: color }}
-                        closeicon={
-                          <Ionicons name="close" size={18} color={color} />
-                        }
-                        searchicon={
-                          <Ionicons name="search" size={18} color={color} />
-                        }
-                        arrowicon={
-                          <Feather
-                            name="chevron-down"
-                            size={24}
-                            color={color}
-                          />
-                        }
-                        defaultOption={{
-                          key: transactionData.interval_count,
-                          value: transactionData.interval_count,
-                        }}
-                        save="key"
-                      />
-
-                      <SelectList
-                        data={FREQUENCIES.map((f) => ({
-                          key: f.key,
-                          value: f.value,
-                        }))}
+                        data={categories}
                         key={keyReset}
                         setSelected={(val: string) =>
                           setTransactionData({
                             ...transactionData,
-                            frequency: val as Frequency,
+                            category_id: parseInt(val),
                           })
                         }
-                        placeholder="Choisir une fréquence"
-                        inputStyles={{ color: color, width: "100%" }}
-                        boxStyles={{
-                          width: "65%",
+                        placeholder="Choisir une catégorie"
+                        inputStyles={{ color: color }}
+                        searchPlaceholder="Entrez une catégorie"
+                        dropdownTextStyles={{ color: color }}
+                        closeicon={
+                          <Ionicons name="close" size={18} color={color} />
+                        }
+                        searchicon={
+                          <Ionicons name="search" size={18} color={color} />
+                        }
+                        arrowicon={
+                          <Feather
+                            name="chevron-down"
+                            size={24}
+                            color={color}
+                          />
+                        }
+                        save="key"
+                      />
+
+                      <View
+                        style={
+                          {
+                            // flexDirection: "row",
+                            // alignItems: "center",
+                            // width: "70%",
+                            // justifyContent: "space-between",
+                          }
+                        }
+                      >
+                        {open && (
+                          <DateTimePicker
+                            mode="date"
+                            display="spinner"
+                            value={date}
+                            onChange={onChange}
+                            style={{
+                              height: 120,
+                              marginTop: 20,
+                              width: "100%",
+                            }}
+                            textColor="#000"
+                          />
+                        )}
+
+                        {open && Platform.OS === "ios" && (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-around",
+                              marginBottom: 20,
+                            }}
+                          >
+                            <TouchableOpacity
+                              style={{
+                                padding: 10,
+                                backgroundColor: "gray",
+                                borderRadius: 10,
+                              }}
+                              onPress={toggleDatePicker}
+                            >
+                              <Text
+                                style={{ color: "black", fontWeight: "bold" }}
+                              >
+                                Annuler
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={{
+                                padding: 10,
+                                backgroundColor: "gray",
+                                borderRadius: 10,
+                              }}
+                              onPress={confirmIOSDate}
+                            >
+                              <Text
+                                style={{ color: "black", fontWeight: "bold" }}
+                              >
+                                Valider
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {!open && (
+                          <TouchableOpacity onPress={toggleDatePicker}>
+                            <TextInput
+                              placeholder="Date debut"
+                              placeholderTextColor="#000"
+                              style={{
+                                borderWidth: 1,
+                                borderColor: "gray",
+                                padding: 10,
+                                borderRadius: 10,
+                                color: color,
+                                height: 52,
+                                width: 145,
+                              }}
+                              editable={false}
+                              value={transactionData.date}
+                              onChangeText={(e: any) =>
+                                setTransactionData({
+                                  ...transactionData,
+                                  date: e,
+                                })
+                              }
+                              onPressIn={toggleDatePicker}
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+
+                    <View>
+                      <ThemedText style={{ fontFamily: "SemiBold" }}>
+                        Note
+                      </ThemedText>
+                      <TextInput
+                        multiline
+                        placeholder="Ajouter une note"
+                        placeholderTextColor={color}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: "gray",
+                          padding: 13,
+                          borderRadius: 10,
+                          color: color,
+                          marginTop: 8,
+                          textAlignVertical: "top",
+                          height: 100,
+                          fontFamily: "Regular",
                         }}
-                        searchPlaceholder="Entrez une fréquence"
+                        onChangeText={(e) =>
+                          setTransactionData({ ...transactionData, note: e })
+                        }
+                      />
+                    </View>
+                  </>
+                )}
+
+                {transactionData.type === "event" && (
+                  <>
+                    <View>
+                      <ThemedText style={{ fontFamily: "SemiBold" }}>
+                        Nom ou description de la charge
+                      </ThemedText>
+                      <TextInput
+                        placeholder="Ex: Loyer, électricité..."
+                        placeholderTextColor={
+                          color === "#FFFFFF" ? COLORS.gray : COLORS.dark
+                        }
+                        style={{
+                          borderWidth: 1,
+                          borderColor: "gray",
+                          padding: 13,
+                          borderRadius: 10,
+                          color: color,
+                          marginTop: 8,
+                          textAlignVertical: "top",
+                          fontFamily: "Regular",
+                        }}
+                        value={transactionData.name}
+                        onChangeText={(e) =>
+                          setTransactionData({ ...transactionData, name: e })
+                        }
+                      />
+                    </View>
+                    <View style={{ gap: 8 }}>
+                      <ThemedText style={{ fontFamily: "SemiBold" }}>
+                        Catégorie
+                      </ThemedText>
+                      <SelectList
+                        data={categories}
+                        key={keyReset}
+                        setSelected={(val: string) =>
+                          setTransactionData({
+                            ...transactionData,
+                            category_id: parseInt(val),
+                          })
+                        }
+                        placeholder="Choisir une catégorie"
+                        inputStyles={{ color: color }}
+                        searchPlaceholder="Entrez une catégorie"
                         dropdownTextStyles={{ color: color }}
                         closeicon={
                           <Ionicons name="close" size={18} color={color} />
@@ -668,54 +649,230 @@ export default function HomeScreen() {
                         save="key"
                       />
                     </View>
-                  </View>
-                </>
-              )}
+                    <View style={{ gap: 8 }}>
+                      <ThemedText style={{ fontFamily: "SemiBold" }}>
+                        Fréquence (chaque :)
+                      </ThemedText>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          // gap: 12,
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                        }}
+                      >
+                        <TextInput
+                          keyboardType="numeric"
+                          placeholder="1"
+                          placeholderTextColor={color}
+                          style={{
+                            borderWidth: 1,
+                            borderColor: "gray",
+                            padding: 13,
+                            borderRadius: 10,
+                            color: color,
+                            width: 60,
+                            textAlign: "center",
+                            fontFamily: "Regular",
+                          }}
+                          maxLength={3}
+                          onChangeText={(e) =>
+                            setTransactionData({
+                              ...transactionData,
+                              interval_count: e,
+                            })
+                          }
+                          value={transactionData.interval_count.toString()}
+                        />
 
-              <TouchableOpacity
-                style={{
-                  padding: 15,
-                  alignItems: "center",
-                  backgroundColor: COLORS.primary,
-                  borderRadius: 25,
-                  opacity: loading ? 0.7 : 1,
-                }}
-                onPress={handleSave}
-                disabled={loading}
-              >
-                <Text
+                        <SelectList
+                          data={FREQUENCIES.map((f) => ({
+                            key: f.key,
+                            value: f.value,
+                          }))}
+                          key={keyReset}
+                          setSelected={(val: string) =>
+                            setTransactionData({
+                              ...transactionData,
+                              frequency: val as Frequency,
+                            })
+                          }
+                          placeholder="Choisir une fréquence"
+                          inputStyles={{ color: color, width: "90%" }}
+                          boxStyles={{
+                            width: "80%",
+                          }}
+                          searchPlaceholder="Entrez une fréquence"
+                          dropdownTextStyles={{ color: color }}
+                          closeicon={
+                            <Ionicons name="close" size={18} color={color} />
+                          }
+                          searchicon={
+                            <Ionicons name="search" size={18} color={color} />
+                          }
+                          arrowicon={
+                            <Feather
+                              name="chevron-down"
+                              size={24}
+                              color={color}
+                            />
+                          }
+                          save="key"
+                        />
+                      </View>
+                    </View>
+                    <View style={{ gap: 8 }}>
+                      <ThemedText style={{ fontFamily: "SemiBold" }}>
+                        Date de paiement
+                      </ThemedText>
+                      <View
+                        style={{
+                          // flexDirection: "row",
+                          // alignItems: "center",
+                          width: "100%",
+                          gap: 8,
+                          // justifyContent: "space-between",
+                        }}
+                      >
+                        {open && (
+                          <DateTimePicker
+                            mode="date"
+                            display="spinner"
+                            value={date}
+                            onChange={onChange}
+                            style={{
+                              height: 120,
+                              marginTop: 20,
+                              width: "100%",
+                            }}
+                            textColor="#000"
+                          />
+                        )}
+
+                        {open && Platform.OS === "ios" && (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-around",
+                              marginBottom: 20,
+                            }}
+                          >
+                            <TouchableOpacity
+                              style={{
+                                padding: 10,
+                                backgroundColor: "gray",
+                                borderRadius: 10,
+                              }}
+                              onPress={toggleDatePicker}
+                            >
+                              <Text
+                                style={{ color: "black", fontWeight: "bold" }}
+                              >
+                                Annuler
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={{
+                                padding: 10,
+                                backgroundColor: "gray",
+                                borderRadius: 10,
+                              }}
+                              onPress={confirmIOSDate}
+                            >
+                              <Text
+                                style={{ color: "black", fontWeight: "bold" }}
+                              >
+                                Valider
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {!open && (
+                          <TouchableOpacity onPress={toggleDatePicker}>
+                            <TextInput
+                              placeholder="Date debut"
+                              placeholderTextColor="#000"
+                              style={{
+                                borderWidth: 1,
+                                borderColor: "gray",
+                                padding: 10,
+                                borderRadius: 10,
+                                color: color,
+                                height: 52,
+                                width: "100%",
+                              }}
+                              editable={false}
+                              value={transactionData.date}
+                              onChangeText={(e: any) =>
+                                setTransactionData({
+                                  ...transactionData,
+                                  date: e,
+                                })
+                              }
+                              onPressIn={toggleDatePicker}
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </>
+                )}
+
+                <TouchableOpacity
                   style={{
-                    color: COLORS.white,
-                    fontFamily: "Bold",
-                    flexDirection: "row",
+                    padding: 15,
                     alignItems: "center",
-                    gap: 8,
+                    backgroundColor: COLORS.primary,
+                    borderRadius: 25,
+                    opacity: loading ? 0.7 : 1,
                   }}
+                  onPress={handleSave}
+                  disabled={loading}
                 >
-                  Enregistrer la transaction
-                  {loading && <ActivityIndicator color={COLORS.white} />}
-                </Text>
-              </TouchableOpacity>
-            </ThemedView>
+                  <Text
+                    style={{
+                      color: COLORS.white,
+                      fontFamily: "Bold",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    Enregistrer la transaction
+                    {loading && <ActivityIndicator color={COLORS.white} />}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
     );
   }
 
-  // const [fontLoaded] = useFonts({
-  //   Bold: require("../../assets/fonts/Poppins-Bold.ttf"),
-  //   BoldItalic: require("../../assets/fonts/Poppins-BoldItalic.ttf"),
-  //   SemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
-  //   Regular: require("../../assets/fonts/Poppins-Regular.ttf"),
-  // });
+  const [fontLoaded] = useFonts({
+    Bold: require("../../assets/fonts/Poppins-Bold.ttf"),
+    BoldItalic: require("../../assets/fonts/Poppins-BoldItalic.ttf"),
+    SemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
+    Regular: require("../../assets/fonts/Poppins-Regular.ttf"),
+  });
 
-  // if (!fontLoaded) {
-  //   return undefined;
-  // }
+  useEffect(() => {
+    if (fontLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontLoaded]);
+
+  if (!fontLoaded) {
+    return null;
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <ThemedView style={{ flex: 1 }} lightColor={COLORS.secondary}>
+      <ThemedView lightColor={COLORS.secondary}>
         <ScrollView
           contentContainerStyle={{
             gap: 22,
@@ -861,7 +1018,7 @@ export default function HomeScreen() {
                 alignItems: "center",
                 marginTop: 10,
               }}
-              onPress={() => openModal("transactionModal")}
+              onPress={() => toggleSheet()}
             >
               <Text
                 style={{
@@ -1158,6 +1315,489 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
       </ThemedView>
+
+      <BottomSheet ref={ref}>
+        <ScrollView
+          ref={ScrollViewRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            padding: 20,
+            gap: 20,
+            marginBottom: 100,
+            height: SCREEN_HEIGHT,
+            backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+          }}
+        >
+          {/* <TouchableOpacity
+            style={{ alignItems: "flex-end" }}
+            onPress={toggleSheet}
+          >
+            <MaterialCommunityIcons name="close" size={35} color="black" />
+          </TouchableOpacity> */}
+
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              backgroundColor: COLORS.secondary,
+              // padding: 10,
+              borderRadius: 50,
+              alignItems: "center",
+            }}
+          >
+            {OPTIONS.map((opt: any) => (
+              <AnimatedPressable
+                layout={LinearTransition.springify().mass(0.5)}
+                key={opt.key}
+                style={{
+                  alignItems: "center",
+                  padding: 12,
+                  borderRadius: 25,
+                  backgroundColor:
+                    option === opt.key ? COLORS.dark : "transparent",
+                }}
+                onPress={() => handleTypeChange(opt.key)}
+              >
+                <Animated.Text
+                  entering={FadeIn.duration(200)}
+                  exiting={FadeOut.duration(200)}
+                  style={{
+                    fontFamily: option === opt.key ? "SemiBold" : "Regular",
+                    color: option === opt.key ? COLORS.white : COLORS.dark,
+                  }}
+                >
+                  {opt.label}
+                </Animated.Text>
+              </AnimatedPressable>
+            ))}
+          </View>
+
+          <View
+            style={{
+              gap: 8,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ThemedText style={{ fontFamily: "Regular" }}>
+              Montant (CFA)
+            </ThemedText>
+            <TextInput
+              placeholder="0"
+              keyboardType="numeric"
+              style={{
+                fontFamily: "Bold",
+                fontSize: 24,
+                width: "100%",
+                color: color,
+                textAlign: "center",
+              }}
+              placeholderTextColor={color}
+              onChangeText={(e) =>
+                setTransactionData({
+                  ...transactionData,
+                  amount: e,
+                })
+              }
+              value={transactionData.amount}
+            />
+          </View>
+
+          {transactionData.type !== "event" && (
+            <>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  // width: "100%",
+                  justifyContent: "center",
+                  gap: 12,
+                }}
+              >
+                <SelectList
+                  data={categories}
+                  key={keyReset}
+                  setSelected={(val: string) =>
+                    setTransactionData({
+                      ...transactionData,
+                      category_id: parseInt(val),
+                    })
+                  }
+                  placeholder="Choisir une catégorie"
+                  inputStyles={{ color: color }}
+                  searchPlaceholder="Entrez une catégorie"
+                  dropdownTextStyles={{ color: color }}
+                  closeicon={<Ionicons name="close" size={18} color={color} />}
+                  searchicon={
+                    <Ionicons name="search" size={18} color={color} />
+                  }
+                  arrowicon={
+                    <Feather name="chevron-down" size={24} color={color} />
+                  }
+                  save="key"
+                />
+
+                <View
+                  style={
+                    {
+                      // flexDirection: "row",
+                      // alignItems: "center",
+                      // width: "70%",
+                      // justifyContent: "space-between",
+                    }
+                  }
+                >
+                  {open && (
+                    <DateTimePicker
+                      mode="date"
+                      display="spinner"
+                      value={date}
+                      onChange={onChange}
+                      style={{
+                        height: 120,
+                        marginTop: 20,
+                        width: "100%",
+                      }}
+                      textColor="#000"
+                    />
+                  )}
+
+                  {open && Platform.OS === "ios" && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-around",
+                        marginBottom: 20,
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={{
+                          padding: 10,
+                          backgroundColor: "gray",
+                          borderRadius: 10,
+                        }}
+                        onPress={toggleDatePicker}
+                      >
+                        <Text style={{ color: "black", fontWeight: "bold" }}>
+                          Annuler
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={{
+                          padding: 10,
+                          backgroundColor: "gray",
+                          borderRadius: 10,
+                        }}
+                        onPress={confirmIOSDate}
+                      >
+                        <Text style={{ color: "black", fontWeight: "bold" }}>
+                          Valider
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {!open && (
+                    <TouchableOpacity onPress={toggleDatePicker}>
+                      <TextInput
+                        placeholder="Date debut"
+                        placeholderTextColor="#000"
+                        style={{
+                          borderWidth: 1,
+                          borderColor: "gray",
+                          padding: 10,
+                          borderRadius: 10,
+                          color: color,
+                          height: 52,
+                          width: 145,
+                        }}
+                        editable={false}
+                        value={transactionData.date}
+                        onChangeText={(e: any) =>
+                          setTransactionData({
+                            ...transactionData,
+                            date: e,
+                          })
+                        }
+                        onPressIn={toggleDatePicker}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={{ fontFamily: "SemiBold" }}>Note</ThemedText>
+                <TextInput
+                  multiline
+                  placeholder="Ajouter une note"
+                  placeholderTextColor={color}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "gray",
+                    padding: 13,
+                    borderRadius: 10,
+                    color: color,
+                    marginTop: 8,
+                    textAlignVertical: "top",
+                    height: 100,
+                    fontFamily: "Regular",
+                  }}
+                  onChangeText={(e) =>
+                    setTransactionData({ ...transactionData, note: e })
+                  }
+                />
+              </View>
+            </>
+          )}
+
+          {transactionData.type === "event" && (
+            <>
+              <View>
+                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                  Nom ou description de la charge
+                </ThemedText>
+                <TextInput
+                  placeholder="Ex: Loyer, électricité..."
+                  placeholderTextColor={
+                    color === "#FFFFFF" ? COLORS.gray : COLORS.dark
+                  }
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "gray",
+                    padding: 13,
+                    borderRadius: 10,
+                    color: color,
+                    marginTop: 8,
+                    textAlignVertical: "top",
+                    fontFamily: "Regular",
+                  }}
+                  value={transactionData.name}
+                  onChangeText={(e) =>
+                    setTransactionData({ ...transactionData, name: e })
+                  }
+                />
+              </View>
+              <View style={{ gap: 8 }}>
+                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                  Catégorie
+                </ThemedText>
+                <SelectList
+                  data={categories}
+                  key={keyReset}
+                  setSelected={(val: string) =>
+                    setTransactionData({
+                      ...transactionData,
+                      category_id: parseInt(val),
+                    })
+                  }
+                  placeholder="Choisir une catégorie"
+                  inputStyles={{ color: color }}
+                  searchPlaceholder="Entrez une catégorie"
+                  dropdownTextStyles={{ color: color }}
+                  closeicon={<Ionicons name="close" size={18} color={color} />}
+                  searchicon={
+                    <Ionicons name="search" size={18} color={color} />
+                  }
+                  arrowicon={
+                    <Feather name="chevron-down" size={24} color={color} />
+                  }
+                  save="key"
+                />
+              </View>
+              <View style={{ gap: 8 }}>
+                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                  Fréquence (chaque :)
+                </ThemedText>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    // gap: 12,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "100%",
+                  }}
+                >
+                  <TextInput
+                    keyboardType="numeric"
+                    placeholder="1"
+                    placeholderTextColor={color}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "gray",
+                      padding: 13,
+                      borderRadius: 10,
+                      color: color,
+                      width: 60,
+                      textAlign: "center",
+                      fontFamily: "Regular",
+                    }}
+                    maxLength={3}
+                    onChangeText={(e) =>
+                      setTransactionData({
+                        ...transactionData,
+                        interval_count: e,
+                      })
+                    }
+                    value={transactionData.interval_count.toString()}
+                  />
+
+                  <SelectList
+                    data={FREQUENCIES.map((f) => ({
+                      key: f.key,
+                      value: f.value,
+                    }))}
+                    key={keyReset}
+                    setSelected={(val: string) =>
+                      setTransactionData({
+                        ...transactionData,
+                        frequency: val as Frequency,
+                      })
+                    }
+                    placeholder="Choisir une fréquence"
+                    inputStyles={{ color: color, width: "90%" }}
+                    boxStyles={{
+                      width: "80%",
+                    }}
+                    searchPlaceholder="Entrez une fréquence"
+                    dropdownTextStyles={{ color: color }}
+                    closeicon={
+                      <Ionicons name="close" size={18} color={color} />
+                    }
+                    searchicon={
+                      <Ionicons name="search" size={18} color={color} />
+                    }
+                    arrowicon={
+                      <Feather name="chevron-down" size={24} color={color} />
+                    }
+                    save="key"
+                  />
+                </View>
+              </View>
+              <View style={{ gap: 8 }}>
+                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                  Date de paiement
+                </ThemedText>
+                <View
+                  style={{
+                    // flexDirection: "row",
+                    // alignItems: "center",
+                    width: "100%",
+                    gap: 8,
+                    // justifyContent: "space-between",
+                  }}
+                >
+                  {open && (
+                    <DateTimePicker
+                      mode="date"
+                      display="spinner"
+                      value={date}
+                      onChange={onChange}
+                      style={{
+                        height: 120,
+                        marginTop: 20,
+                        width: "100%",
+                      }}
+                      textColor="#000"
+                    />
+                  )}
+
+                  {open && Platform.OS === "ios" && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-around",
+                        marginBottom: 20,
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={{
+                          padding: 10,
+                          backgroundColor: "gray",
+                          borderRadius: 10,
+                        }}
+                        onPress={toggleDatePicker}
+                      >
+                        <Text style={{ color: "black", fontWeight: "bold" }}>
+                          Annuler
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={{
+                          padding: 10,
+                          backgroundColor: "gray",
+                          borderRadius: 10,
+                        }}
+                        onPress={confirmIOSDate}
+                      >
+                        <Text style={{ color: "black", fontWeight: "bold" }}>
+                          Valider
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {!open && (
+                    <TouchableOpacity onPress={toggleDatePicker}>
+                      <TextInput
+                        placeholder="Date debut"
+                        placeholderTextColor="#000"
+                        style={{
+                          borderWidth: 1,
+                          borderColor: "gray",
+                          padding: 10,
+                          borderRadius: 10,
+                          color: color,
+                          height: 52,
+                          width: "100%",
+                        }}
+                        editable={false}
+                        value={transactionData.date}
+                        onChangeText={(e: any) =>
+                          setTransactionData({
+                            ...transactionData,
+                            date: e,
+                          })
+                        }
+                        onPressIn={toggleDatePicker}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </>
+          )}
+
+          <TouchableOpacity
+            style={{
+              padding: 15,
+              alignItems: "center",
+              backgroundColor: COLORS.primary,
+              borderRadius: 25,
+              opacity: loading ? 0.7 : 1,
+            }}
+            onPress={handleSave}
+            disabled={loading}
+          >
+            <Text
+              style={{
+                color: COLORS.white,
+                fontFamily: "Bold",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              Enregistrer la transaction
+              {loading && <ActivityIndicator color={COLORS.white} />}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </BottomSheet>
+      {/* </View>
+      </Modal> */}
       {transactionModal()}
     </SafeAreaView>
   );
