@@ -4,11 +4,7 @@ import {
 } from "../../notifications/recurringNotifications";
 import { all, getOne, runSql } from "../index";
 
-export type RecurringFrequency =
-  | "semaine"
-  | "mensuel"
-  | "annuel"
-  | "personnalisé";
+export type RecurringFrequency = "semaine" | "mensuel" | "annuel" | "jour";
 
 export type RecurringInput = {
   name: string;

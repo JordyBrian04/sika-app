@@ -5,29 +5,30 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import GaugeHalfCircle from "@/src/components/GaugeCard";
 import { CategoryInput, listeCategories } from "@/src/db/repositories/category";
+import { addRecurringPayment } from "@/src/db/repositories/recurringRepo";
 import {
   addTransaction,
+  listTransactions,
+  TransactionRow,
   TransactionType,
 } from "@/src/db/repositories/transactions";
 import { getConstante } from "@/src/services/AsyncStorage";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
+import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PlatformPressable } from "@react-navigation/elements";
-import { useFonts } from "expo-font";
 import { useFocusEffect } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
   Image,
-  KeyboardAvoidingView,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -113,7 +114,7 @@ export default function HomeScreen() {
   const [date, setDate] = useState(new Date());
   const [keyReset, setKeyReset] = useState(0);
   const ref = useRef<BottomSheetRefProps>(null);
-  const [openSheet, setOpenSheet] = useState(false);
+  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
 
   const OPTIONS = [
     { key: "entree", label: "Entrée" },
@@ -186,7 +187,7 @@ export default function HomeScreen() {
   };
 
   const getUser = async () => {
-    // console.log(await getProfile());
+    console.log(await getProfile());
     setUser((await getProfile()) ?? null);
   };
 
@@ -201,18 +202,18 @@ export default function HomeScreen() {
         .filter((c) => c.type === option)
         .map((c) => ({ key: c.id, value: c.name })),
     );
-    // console.log(
-    //   "Categories:",
-    //   cats
-    //     .filter((c) => c.type === option)
-    //     .map((c) => ({ key: c.id, value: c.name })),
-    // );
+  };
+
+  const getDatas = async () => {
+    const transactions = await listTransactions(10);
+    setTransactions(transactions);
   };
 
   useFocusEffect(
     useCallback(() => {
       getUser();
       getConstant();
+      getDatas();
     }, []),
   );
 
@@ -268,9 +269,21 @@ export default function HomeScreen() {
         // Enregistrer dans la table des paiements récurrents
         // console.log("Données de la charge mensuelle à enregistrer:", transactionData);
         // await addRecurringPayment(transactionData);
+        const res = await addRecurringPayment({
+          name: transactionData.name,
+          amount: parseInt(transactionData.amount),
+          category_id: transactionData.category_id,
+          frequency: transactionData.frequency,
+          interval_count: parseInt(transactionData.interval_count),
+          next_date: transactionData.next_date,
+          remind_days_before: transactionData.remind_days_before,
+          active: transactionData.active,
+        });
+
+        console.log("ID du paiement récurrent ajouté:", res);
       } else {
         // Enregistrer dans la table des transactions
-        await addTransaction({
+        const res = await addTransaction({
           amount: parseInt(transactionData.amount),
           type: transactionData.type,
           category_id: transactionData.category_id,
@@ -278,10 +291,13 @@ export default function HomeScreen() {
           note: transactionData.note,
           recurring_id: transactionData.recurring_id,
         });
+
+        console.log("ID de la transaction ajoutée:", res);
       }
 
+      getDatas(); // Rafraîchir la liste des transactions
       resetData();
-      closeModal();
+      toggleSheet();
     } catch (error) {
       alert(
         "Une erreur est survenue lors de l'enregistrement de la transaction.",
@@ -307,568 +323,28 @@ export default function HomeScreen() {
     );
   };
 
-  function transactionModal() {
-    return (
-      <Modal
-        visible={isVisible("transactionModal")}
-        animationType="slide"
-        transparent
-        onRequestClose={closeModal}
-      >
-        <KeyboardAvoidingView
-          style={{
-            flex: 1,
-            maxHeight: 600,
-            position: "absolute",
-            bottom: 0,
-            width: "100%",
-            zIndex: 999999,
-          }}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <View
-            style={{
-              flex: 1,
-              justifyContent: "center",
-              alignItems: "center",
-              backgroundColor: "rgba(0,0,0,0.5)",
-            }}
-          >
-            <View
-              style={{
-                borderTopEndRadius: 24,
-                borderTopStartRadius: 24,
-                position: "absolute",
-                bottom: 0,
-                // padding: 20,
-                // width: "100%",
-                // gap: 22,
-                // paddingBottom: Platform.OS === "ios" ? 40 : 20, // Ajustement dynamique
-                maxHeight: SCREEN_HEIGHT * 0.9,
-                backgroundColor:
-                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-              }}
-            >
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-                contentContainerStyle={{
-                  padding: 20,
-                  gap: 22,
-                  paddingBottom: Platform.OS === "ios" ? 60 : 30,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    backgroundColor: COLORS.secondary,
-                    // padding: 10,
-                    borderRadius: 50,
-                    alignItems: "center",
-                  }}
-                >
-                  {OPTIONS.map((opt: any) => (
-                    <AnimatedPressable
-                      layout={LinearTransition.springify().mass(0.5)}
-                      key={opt.key}
-                      style={{
-                        alignItems: "center",
-                        padding: 12,
-                        borderRadius: 25,
-                        backgroundColor:
-                          option === opt.key ? COLORS.dark : "transparent",
-                      }}
-                      onPress={() => handleTypeChange(opt.key)}
-                    >
-                      <Animated.Text
-                        entering={FadeIn.duration(200)}
-                        exiting={FadeOut.duration(200)}
-                        style={{
-                          fontFamily:
-                            option === opt.key ? "SemiBold" : "Regular",
-                          color:
-                            option === opt.key ? COLORS.white : COLORS.dark,
-                        }}
-                      >
-                        {opt.label}
-                      </Animated.Text>
-                    </AnimatedPressable>
-                  ))}
-                </View>
+  const toggleSwitch = () =>
+    setTransactionData({
+      ...transactionData,
+      active: transactionData.active === 1 ? 0 : 1,
+    });
 
-                <View
-                  style={{
-                    gap: 8,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <ThemedText style={{ fontFamily: "Regular" }}>
-                    Montant (CFA)
-                  </ThemedText>
-                  <TextInput
-                    placeholder="0"
-                    keyboardType="numeric"
-                    style={{
-                      fontFamily: "Bold",
-                      fontSize: 24,
-                      width: "100%",
-                      color: color,
-                      textAlign: "center",
-                    }}
-                    placeholderTextColor={color}
-                    onChangeText={(e) =>
-                      setTransactionData({
-                        ...transactionData,
-                        amount: e,
-                      })
-                    }
-                    value={transactionData.amount}
-                  />
-                </View>
+  // const [fontLoaded] = useFonts({
+  //   Bold: require("../../assets/fonts/Poppins-Bold.ttf"),
+  //   BoldItalic: require("../../assets/fonts/Poppins-BoldItalic.ttf"),
+  //   SemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
+  //   Regular: require("../../assets/fonts/Poppins-Regular.ttf"),
+  // });
 
-                {transactionData.type !== "event" && (
-                  <>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        // width: "100%",
-                        justifyContent: "center",
-                        gap: 12,
-                      }}
-                    >
-                      <SelectList
-                        data={categories}
-                        key={keyReset}
-                        setSelected={(val: string) =>
-                          setTransactionData({
-                            ...transactionData,
-                            category_id: parseInt(val),
-                          })
-                        }
-                        placeholder="Choisir une catégorie"
-                        inputStyles={{ color: color }}
-                        searchPlaceholder="Entrez une catégorie"
-                        dropdownTextStyles={{ color: color }}
-                        closeicon={
-                          <Ionicons name="close" size={18} color={color} />
-                        }
-                        searchicon={
-                          <Ionicons name="search" size={18} color={color} />
-                        }
-                        arrowicon={
-                          <Feather
-                            name="chevron-down"
-                            size={24}
-                            color={color}
-                          />
-                        }
-                        save="key"
-                      />
+  // useEffect(() => {
+  //   if (fontLoaded) {
+  //     SplashScreen.hideAsync();
+  //   }
+  // }, [fontLoaded]);
 
-                      <View
-                        style={
-                          {
-                            // flexDirection: "row",
-                            // alignItems: "center",
-                            // width: "70%",
-                            // justifyContent: "space-between",
-                          }
-                        }
-                      >
-                        {open && (
-                          <DateTimePicker
-                            mode="date"
-                            display="spinner"
-                            value={date}
-                            onChange={onChange}
-                            style={{
-                              height: 120,
-                              marginTop: 20,
-                              width: "100%",
-                            }}
-                            textColor="#000"
-                          />
-                        )}
-
-                        {open && Platform.OS === "ios" && (
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-around",
-                              marginBottom: 20,
-                            }}
-                          >
-                            <TouchableOpacity
-                              style={{
-                                padding: 10,
-                                backgroundColor: "gray",
-                                borderRadius: 10,
-                              }}
-                              onPress={toggleDatePicker}
-                            >
-                              <Text
-                                style={{ color: "black", fontWeight: "bold" }}
-                              >
-                                Annuler
-                              </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={{
-                                padding: 10,
-                                backgroundColor: "gray",
-                                borderRadius: 10,
-                              }}
-                              onPress={confirmIOSDate}
-                            >
-                              <Text
-                                style={{ color: "black", fontWeight: "bold" }}
-                              >
-                                Valider
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-
-                        {!open && (
-                          <TouchableOpacity onPress={toggleDatePicker}>
-                            <TextInput
-                              placeholder="Date debut"
-                              placeholderTextColor="#000"
-                              style={{
-                                borderWidth: 1,
-                                borderColor: "gray",
-                                padding: 10,
-                                borderRadius: 10,
-                                color: color,
-                                height: 52,
-                                width: 145,
-                              }}
-                              editable={false}
-                              value={transactionData.date}
-                              onChangeText={(e: any) =>
-                                setTransactionData({
-                                  ...transactionData,
-                                  date: e,
-                                })
-                              }
-                              onPressIn={toggleDatePicker}
-                            />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-
-                    <View>
-                      <ThemedText style={{ fontFamily: "SemiBold" }}>
-                        Note
-                      </ThemedText>
-                      <TextInput
-                        multiline
-                        placeholder="Ajouter une note"
-                        placeholderTextColor={color}
-                        style={{
-                          borderWidth: 1,
-                          borderColor: "gray",
-                          padding: 13,
-                          borderRadius: 10,
-                          color: color,
-                          marginTop: 8,
-                          textAlignVertical: "top",
-                          height: 100,
-                          fontFamily: "Regular",
-                        }}
-                        onChangeText={(e) =>
-                          setTransactionData({ ...transactionData, note: e })
-                        }
-                      />
-                    </View>
-                  </>
-                )}
-
-                {transactionData.type === "event" && (
-                  <>
-                    <View>
-                      <ThemedText style={{ fontFamily: "SemiBold" }}>
-                        Nom ou description de la charge
-                      </ThemedText>
-                      <TextInput
-                        placeholder="Ex: Loyer, électricité..."
-                        placeholderTextColor={
-                          color === "#FFFFFF" ? COLORS.gray : COLORS.dark
-                        }
-                        style={{
-                          borderWidth: 1,
-                          borderColor: "gray",
-                          padding: 13,
-                          borderRadius: 10,
-                          color: color,
-                          marginTop: 8,
-                          textAlignVertical: "top",
-                          fontFamily: "Regular",
-                        }}
-                        value={transactionData.name}
-                        onChangeText={(e) =>
-                          setTransactionData({ ...transactionData, name: e })
-                        }
-                      />
-                    </View>
-                    <View style={{ gap: 8 }}>
-                      <ThemedText style={{ fontFamily: "SemiBold" }}>
-                        Catégorie
-                      </ThemedText>
-                      <SelectList
-                        data={categories}
-                        key={keyReset}
-                        setSelected={(val: string) =>
-                          setTransactionData({
-                            ...transactionData,
-                            category_id: parseInt(val),
-                          })
-                        }
-                        placeholder="Choisir une catégorie"
-                        inputStyles={{ color: color }}
-                        searchPlaceholder="Entrez une catégorie"
-                        dropdownTextStyles={{ color: color }}
-                        closeicon={
-                          <Ionicons name="close" size={18} color={color} />
-                        }
-                        searchicon={
-                          <Ionicons name="search" size={18} color={color} />
-                        }
-                        arrowicon={
-                          <Feather
-                            name="chevron-down"
-                            size={24}
-                            color={color}
-                          />
-                        }
-                        save="key"
-                      />
-                    </View>
-                    <View style={{ gap: 8 }}>
-                      <ThemedText style={{ fontFamily: "SemiBold" }}>
-                        Fréquence (chaque :)
-                      </ThemedText>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          // gap: 12,
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          width: "100%",
-                        }}
-                      >
-                        <TextInput
-                          keyboardType="numeric"
-                          placeholder="1"
-                          placeholderTextColor={color}
-                          style={{
-                            borderWidth: 1,
-                            borderColor: "gray",
-                            padding: 13,
-                            borderRadius: 10,
-                            color: color,
-                            width: 60,
-                            textAlign: "center",
-                            fontFamily: "Regular",
-                          }}
-                          maxLength={3}
-                          onChangeText={(e) =>
-                            setTransactionData({
-                              ...transactionData,
-                              interval_count: e,
-                            })
-                          }
-                          value={transactionData.interval_count.toString()}
-                        />
-
-                        <SelectList
-                          data={FREQUENCIES.map((f) => ({
-                            key: f.key,
-                            value: f.value,
-                          }))}
-                          key={keyReset}
-                          setSelected={(val: string) =>
-                            setTransactionData({
-                              ...transactionData,
-                              frequency: val as Frequency,
-                            })
-                          }
-                          placeholder="Choisir une fréquence"
-                          inputStyles={{ color: color, width: "90%" }}
-                          boxStyles={{
-                            width: "80%",
-                          }}
-                          searchPlaceholder="Entrez une fréquence"
-                          dropdownTextStyles={{ color: color }}
-                          closeicon={
-                            <Ionicons name="close" size={18} color={color} />
-                          }
-                          searchicon={
-                            <Ionicons name="search" size={18} color={color} />
-                          }
-                          arrowicon={
-                            <Feather
-                              name="chevron-down"
-                              size={24}
-                              color={color}
-                            />
-                          }
-                          save="key"
-                        />
-                      </View>
-                    </View>
-                    <View style={{ gap: 8 }}>
-                      <ThemedText style={{ fontFamily: "SemiBold" }}>
-                        Date de paiement
-                      </ThemedText>
-                      <View
-                        style={{
-                          // flexDirection: "row",
-                          // alignItems: "center",
-                          width: "100%",
-                          gap: 8,
-                          // justifyContent: "space-between",
-                        }}
-                      >
-                        {open && (
-                          <DateTimePicker
-                            mode="date"
-                            display="spinner"
-                            value={date}
-                            onChange={onChange}
-                            style={{
-                              height: 120,
-                              marginTop: 20,
-                              width: "100%",
-                            }}
-                            textColor="#000"
-                          />
-                        )}
-
-                        {open && Platform.OS === "ios" && (
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-around",
-                              marginBottom: 20,
-                            }}
-                          >
-                            <TouchableOpacity
-                              style={{
-                                padding: 10,
-                                backgroundColor: "gray",
-                                borderRadius: 10,
-                              }}
-                              onPress={toggleDatePicker}
-                            >
-                              <Text
-                                style={{ color: "black", fontWeight: "bold" }}
-                              >
-                                Annuler
-                              </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={{
-                                padding: 10,
-                                backgroundColor: "gray",
-                                borderRadius: 10,
-                              }}
-                              onPress={confirmIOSDate}
-                            >
-                              <Text
-                                style={{ color: "black", fontWeight: "bold" }}
-                              >
-                                Valider
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-
-                        {!open && (
-                          <TouchableOpacity onPress={toggleDatePicker}>
-                            <TextInput
-                              placeholder="Date debut"
-                              placeholderTextColor="#000"
-                              style={{
-                                borderWidth: 1,
-                                borderColor: "gray",
-                                padding: 10,
-                                borderRadius: 10,
-                                color: color,
-                                height: 52,
-                                width: "100%",
-                              }}
-                              editable={false}
-                              value={transactionData.date}
-                              onChangeText={(e: any) =>
-                                setTransactionData({
-                                  ...transactionData,
-                                  date: e,
-                                })
-                              }
-                              onPressIn={toggleDatePicker}
-                            />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </>
-                )}
-
-                <TouchableOpacity
-                  style={{
-                    padding: 15,
-                    alignItems: "center",
-                    backgroundColor: COLORS.primary,
-                    borderRadius: 25,
-                    opacity: loading ? 0.7 : 1,
-                  }}
-                  onPress={handleSave}
-                  disabled={loading}
-                >
-                  <Text
-                    style={{
-                      color: COLORS.white,
-                      fontFamily: "Bold",
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    Enregistrer la transaction
-                    {loading && <ActivityIndicator color={COLORS.white} />}
-                  </Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    );
-  }
-
-  const [fontLoaded] = useFonts({
-    Bold: require("../../assets/fonts/Poppins-Bold.ttf"),
-    BoldItalic: require("../../assets/fonts/Poppins-BoldItalic.ttf"),
-    SemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
-    Regular: require("../../assets/fonts/Poppins-Regular.ttf"),
-  });
-
-  useEffect(() => {
-    if (fontLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontLoaded]);
-
-  if (!fontLoaded) {
-    return null;
-  }
+  // if (!fontLoaded) {
+  //   return null;
+  // }
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -893,13 +369,15 @@ export default function HomeScreen() {
           >
             <ThemedText
               style={{
-                fontFamily: "Bold",
+                fontFamily: FONT_FAMILY.bold,
                 fontSize: 35,
                 color: COLORS.primary,
               }}
             >
               S
-              <ThemedText style={{ fontFamily: "SemiBold", fontSize: 22 }}>
+              <ThemedText
+                style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22 }}
+              >
                 ika
               </ThemedText>
             </ThemedText>
@@ -911,7 +389,9 @@ export default function HomeScreen() {
                 gap: 10,
               }}
             >
-              <ThemedText style={{ fontFamily: "Regular", fontSize: 14 }}>
+              <ThemedText
+                style={{ fontFamily: FONT_FAMILY.regular, fontSize: 14 }}
+              >
                 Bienvenue, {user?.name}
               </ThemedText>
               <Image
@@ -937,7 +417,7 @@ export default function HomeScreen() {
           >
             <ThemedText
               style={{
-                fontFamily: "Regular",
+                fontFamily: FONT_FAMILY.semibold,
                 color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
               }}
             >
@@ -945,7 +425,7 @@ export default function HomeScreen() {
             </ThemedText>
             <ThemedText
               style={{
-                fontFamily: "Bold",
+                fontFamily: FONT_FAMILY.bold,
                 color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
                 fontSize: 32,
               }}
@@ -954,7 +434,7 @@ export default function HomeScreen() {
             </ThemedText>
             <ThemedText
               style={{
-                fontFamily: "Regular",
+                fontFamily: FONT_FAMILY.regular,
                 color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
                 marginTop: 8,
               }}
@@ -986,21 +466,23 @@ export default function HomeScreen() {
               >
                 <ThemedText
                   style={{
-                    fontFamily: "Regular",
+                    fontFamily: FONT_FAMILY.regular,
                     marginTop: 4,
                     color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
                     fontSize: 12,
                   }}
                 >
                   Depensé :{" "}
-                  <Text style={{ fontFamily: "SemiBold" }}>15 000 FCFA </Text>/
-                  20 000 FCFA
+                  <Text style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    15 000 FCFA{" "}
+                  </Text>
+                  / 20 000 FCFA
                 </ThemedText>
 
                 <Text
                   style={{
                     color: COLORS.primary,
-                    fontFamily: "SemiBold",
+                    fontFamily: FONT_FAMILY.semibold,
                     fontSize: 12,
                   }}
                 >
@@ -1022,7 +504,7 @@ export default function HomeScreen() {
             >
               <Text
                 style={{
-                  fontFamily: "SemiBold",
+                  fontFamily: FONT_FAMILY.semibold,
                   color: color === "#FFFFFF" ? COLORS.white : COLORS.dark,
                 }}
               >
@@ -1041,11 +523,15 @@ export default function HomeScreen() {
                 alignItems: "center",
               }}
             >
-              <ThemedText style={{ fontFamily: "SemiBold", fontSize: 20 }}>
+              <ThemedText
+                style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 20 }}
+              >
                 Paiement à venir
               </ThemedText>
               <TouchableOpacity>
-                <ThemedText>Voir plus</ThemedText>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
+                  Voir plus
+                </ThemedText>
               </TouchableOpacity>
             </View>
 
@@ -1117,11 +603,15 @@ export default function HomeScreen() {
                 alignItems: "center",
               }}
             >
-              <ThemedText style={{ fontFamily: "SemiBold", fontSize: 20 }}>
+              <ThemedText
+                style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 20 }}
+              >
                 Reçentes transactions
               </ThemedText>
               <TouchableOpacity>
-                <ThemedText>Voir plus</ThemedText>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
+                  Voir plus
+                </ThemedText>
               </TouchableOpacity>
             </View>
 
@@ -1181,12 +671,12 @@ export default function HomeScreen() {
                       width: "80%",
                     }}
                   >
-                    <ThemedText style={{ fontFamily: "SemiBold" }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
                       Achat de crédit
                     </ThemedText>
                     <ThemedText
                       style={{
-                        fontFamily: "Bold",
+                        fontFamily: FONT_FAMILY.bold,
                         fontSize: 14,
                         color: COLORS.red,
                       }}
@@ -1203,13 +693,16 @@ export default function HomeScreen() {
                     }}
                   >
                     <ThemedText
-                      style={{ fontFamily: "Regular", color: COLORS.gray }}
+                      style={{
+                        fontFamily: FONT_FAMILY.regular,
+                        color: COLORS.gray,
+                      }}
                     >
                       Abonnement
                     </ThemedText>
                     <ThemedText
                       style={{
-                        fontFamily: "Regular",
+                        fontFamily: FONT_FAMILY.regular,
                         fontSize: 14,
                         color: COLORS.gray,
                       }}
@@ -1244,12 +737,12 @@ export default function HomeScreen() {
                       width: "80%",
                     }}
                   >
-                    <ThemedText style={{ fontFamily: "SemiBold" }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
                       Freelance
                     </ThemedText>
                     <ThemedText
                       style={{
-                        fontFamily: "Bold",
+                        fontFamily: FONT_FAMILY.bold,
                         fontSize: 14,
                         color: COLORS.green,
                       }}
@@ -1266,13 +759,16 @@ export default function HomeScreen() {
                     }}
                   >
                     <ThemedText
-                      style={{ fontFamily: "Regular", color: COLORS.gray }}
+                      style={{
+                        fontFamily: FONT_FAMILY.regular,
+                        color: COLORS.gray,
+                      }}
                     >
                       Travail
                     </ThemedText>
                     <ThemedText
                       style={{
-                        fontFamily: "Regular",
+                        fontFamily: FONT_FAMILY.regular,
                         fontSize: 14,
                         color: COLORS.gray,
                       }}
@@ -1287,26 +783,7 @@ export default function HomeScreen() {
           {/* Fin Liste des transactions */}
 
           {/* Mes xp */}
-          <View
-          // style={{
-          //   backgroundColor: color === "#FFFFFF" ? COLORS.white : COLORS.dark,
-          //   borderRadius: 10,
-          //   padding: 15,
-          //   marginTop: 20,
-          //   gap: 8,
-          //   justifyContent: "center",
-          //   alignItems: "center",
-          // }}
-          >
-            {/* <Text
-              style={{
-                fontFamily: "SemiBold",
-                color: COLORS.primary,
-                fontSize: 22,
-              }}
-            >
-              Mes xp
-            </Text> */}
+          <View>
             <GaugeHalfCircle
               value={user?.xpIntoLevel ?? 0}
               level={user?.level ?? 1}
@@ -1319,22 +796,20 @@ export default function HomeScreen() {
       <BottomSheet ref={ref}>
         <ScrollView
           ref={ScrollViewRef}
-          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={true}
+          style={{ flex: 1 }}
           contentContainerStyle={{
             padding: 20,
             gap: 20,
-            marginBottom: 100,
-            height: SCREEN_HEIGHT,
-            backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+            paddingBottom: 150,
+            // height: SCREEN_HEIGHT,
+            // backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+            zIndex: 999,
+            width: "100%",
+            // flex: 1,
           }}
         >
-          {/* <TouchableOpacity
-            style={{ alignItems: "flex-end" }}
-            onPress={toggleSheet}
-          >
-            <MaterialCommunityIcons name="close" size={35} color="black" />
-          </TouchableOpacity> */}
-
           <View
             style={{
               flexDirection: "row",
@@ -1362,7 +837,10 @@ export default function HomeScreen() {
                   entering={FadeIn.duration(200)}
                   exiting={FadeOut.duration(200)}
                   style={{
-                    fontFamily: option === opt.key ? "SemiBold" : "Regular",
+                    fontFamily:
+                      option === opt.key
+                        ? FONT_FAMILY.semibold
+                        : FONT_FAMILY.regular,
                     color: option === opt.key ? COLORS.white : COLORS.dark,
                   }}
                 >
@@ -1379,14 +857,14 @@ export default function HomeScreen() {
               justifyContent: "center",
             }}
           >
-            <ThemedText style={{ fontFamily: "Regular" }}>
+            <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
               Montant (CFA)
             </ThemedText>
             <TextInput
               placeholder="0"
               keyboardType="numeric"
               style={{
-                fontFamily: "Bold",
+                fontFamily: FONT_FAMILY.bold,
                 fontSize: 24,
                 width: "100%",
                 color: color,
@@ -1424,9 +902,15 @@ export default function HomeScreen() {
                     })
                   }
                   placeholder="Choisir une catégorie"
-                  inputStyles={{ color: color }}
+                  inputStyles={{
+                    color: color,
+                    fontFamily: FONT_FAMILY.regular,
+                  }}
                   searchPlaceholder="Entrez une catégorie"
-                  dropdownTextStyles={{ color: color }}
+                  dropdownTextStyles={{
+                    color: color,
+                    fontFamily: FONT_FAMILY.regular,
+                  }}
                   closeicon={<Ionicons name="close" size={18} color={color} />}
                   searchicon={
                     <Ionicons name="search" size={18} color={color} />
@@ -1528,7 +1012,9 @@ export default function HomeScreen() {
               </View>
 
               <View>
-                <ThemedText style={{ fontFamily: "SemiBold" }}>Note</ThemedText>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                  Note
+                </ThemedText>
                 <TextInput
                   multiline
                   placeholder="Ajouter une note"
@@ -1542,7 +1028,7 @@ export default function HomeScreen() {
                     marginTop: 8,
                     textAlignVertical: "top",
                     height: 100,
-                    fontFamily: "Regular",
+                    fontFamily: FONT_FAMILY.regular,
                   }}
                   onChangeText={(e) =>
                     setTransactionData({ ...transactionData, note: e })
@@ -1555,7 +1041,7 @@ export default function HomeScreen() {
           {transactionData.type === "event" && (
             <>
               <View>
-                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
                   Nom ou description de la charge
                 </ThemedText>
                 <TextInput
@@ -1571,7 +1057,7 @@ export default function HomeScreen() {
                     color: color,
                     marginTop: 8,
                     textAlignVertical: "top",
-                    fontFamily: "Regular",
+                    fontFamily: FONT_FAMILY.regular,
                   }}
                   value={transactionData.name}
                   onChangeText={(e) =>
@@ -1580,7 +1066,7 @@ export default function HomeScreen() {
                 />
               </View>
               <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
                   Catégorie
                 </ThemedText>
                 <SelectList
@@ -1607,7 +1093,7 @@ export default function HomeScreen() {
                 />
               </View>
               <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
                   Fréquence (chaque :)
                 </ThemedText>
                 <View
@@ -1631,7 +1117,7 @@ export default function HomeScreen() {
                       color: color,
                       width: 60,
                       textAlign: "center",
-                      fontFamily: "Regular",
+                      fontFamily: FONT_FAMILY.regular,
                     }}
                     maxLength={3}
                     onChangeText={(e) =>
@@ -1656,12 +1142,19 @@ export default function HomeScreen() {
                       })
                     }
                     placeholder="Choisir une fréquence"
-                    inputStyles={{ color: color, width: "90%" }}
+                    inputStyles={{
+                      color: color,
+                      width: "90%",
+                      fontFamily: FONT_FAMILY.regular,
+                    }}
                     boxStyles={{
                       width: "80%",
                     }}
                     searchPlaceholder="Entrez une fréquence"
-                    dropdownTextStyles={{ color: color }}
+                    dropdownTextStyles={{
+                      color: color,
+                      fontFamily: FONT_FAMILY.regular,
+                    }}
                     closeicon={
                       <Ionicons name="close" size={18} color={color} />
                     }
@@ -1676,7 +1169,7 @@ export default function HomeScreen() {
                 </View>
               </View>
               <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: "SemiBold" }}>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
                   Date de paiement
                 </ThemedText>
                 <View
@@ -1750,6 +1243,7 @@ export default function HomeScreen() {
                           padding: 10,
                           borderRadius: 10,
                           color: color,
+                          fontFamily: FONT_FAMILY.regular,
                           height: 52,
                           width: "100%",
                         }}
@@ -1766,6 +1260,69 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
+              </View>
+              <View style={{ gap: 8 }}>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                  Rappel
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 12 }}
+                >
+                  {REMIND_PRESETS.map((preset) => (
+                    <TouchableOpacity
+                      key={preset}
+                      style={{
+                        padding: 10,
+                        backgroundColor:
+                          transactionData.remind_days_before === preset
+                            ? COLORS.primary
+                            : COLORS.secondary,
+                        borderRadius: 10,
+                      }}
+                      onPress={() =>
+                        setTransactionData({
+                          ...transactionData,
+                          remind_days_before: preset,
+                        })
+                      }
+                    >
+                      <ThemedText
+                        style={{
+                          color:
+                            transactionData.remind_days_before === preset
+                              ? COLORS.white
+                              : COLORS.noir,
+                          fontFamily: FONT_FAMILY.regular,
+                        }}
+                      >
+                        {preset === 0 ? "Jour J" : `J-${preset}`}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View
+                style={{
+                  gap: 8,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                  Actif
+                </ThemedText>
+                <Switch
+                  trackColor={{ false: COLORS.gray, true: COLORS.gray }}
+                  thumbColor={
+                    transactionData.active ? COLORS.green : COLORS.secondary
+                  }
+                  style={{ transform: [{ scaleX: 1 }, { scaleY: 1 }] }}
+                  onValueChange={toggleSwitch}
+                  value={transactionData.active === 1}
+                />
               </View>
             </>
           )}
@@ -1784,7 +1341,7 @@ export default function HomeScreen() {
             <Text
               style={{
                 color: COLORS.white,
-                fontFamily: "Bold",
+                fontFamily: FONT_FAMILY.bold,
                 flexDirection: "row",
                 alignItems: "center",
                 gap: 8,
@@ -1796,9 +1353,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </ScrollView>
       </BottomSheet>
-      {/* </View>
-      </Modal> */}
-      {transactionModal()}
     </SafeAreaView>
   );
 }

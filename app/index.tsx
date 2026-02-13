@@ -1,9 +1,9 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
 import * as LocalAuthentification from "expo-local-authentication";
 import { useRouter } from "expo-router";
@@ -278,12 +278,12 @@ const Page = () => {
     );
   }
 
-  const [fontLoaded] = useFonts({
-    Bold: require("../assets/fonts/Poppins-Bold.ttf"),
-    BoldItalic: require("../assets/fonts/Poppins-BoldItalic.ttf"),
-    SemiBold: require("../assets/fonts/Poppins-SemiBold.ttf"),
-    Regular: require("../assets/fonts/Poppins-Regular.ttf"),
-  });
+  // const [fontLoaded] = useFonts({
+  //   Bold: require("../assets/fonts/Poppins-Bold.ttf"),
+  //   BoldItalic: require("../assets/fonts/Poppins-BoldItalic.ttf"),
+  //   SemiBold: require("../assets/fonts/Poppins-SemiBold.ttf"),
+  //   Regular: require("../assets/fonts/Poppins-Regular.ttf"),
+  // });
 
   // useEffect(() => {
   //   if (fontLoaded) {
@@ -305,7 +305,7 @@ const Page = () => {
           padding: 20,
         }}
       >
-        <ThemedText type="title" style={{ fontFamily: "Bold" }}>
+        <ThemedText type="title" style={{ fontFamily: FONT_FAMILY.bold }}>
           {user.length > 0
             ? `Bienvenue ${user[0].name}!`
             : "Créez un nouveau code"}
@@ -369,7 +369,9 @@ const Page = () => {
                 }}
                 onPress={() => onNumberPress(num)}
               >
-                <ThemedText style={{ fontSize: 22, fontFamily: "Regular" }}>
+                <ThemedText
+                  style={{ fontSize: 22, fontFamily: FONT_FAMILY.regular }}
+                >
                   {num}
                 </ThemedText>
               </TouchableOpacity>
@@ -397,7 +399,9 @@ const Page = () => {
                 }}
                 onPress={() => onNumberPress(num)}
               >
-                <ThemedText style={{ fontSize: 22, fontFamily: "Regular" }}>
+                <ThemedText
+                  style={{ fontSize: 22, fontFamily: FONT_FAMILY.regular }}
+                >
                   {num}
                 </ThemedText>
               </TouchableOpacity>

@@ -71,6 +71,8 @@ export async function addTransaction(input: {
   } catch (e) {
     console.warn("reward failed:", e);
   }
+
+  return transactionId?.id;
 }
 
 export async function listTransactions(limit = 50): Promise<TransactionRow[]> {

@@ -21,6 +21,7 @@ import {
   setupRecurringNotificationCategory,
 } from "../src/notifications/recurringNotifications";
 import { runRecurringCatchUp } from "../src/services/recurring/catchup";
+import { useAppFonts } from "../src/theme/useAppFonts";
 import { toYYYYMMDD } from "../src/utils/date";
 
 export const unstable_settings = {
@@ -30,6 +31,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [ready, setReady] = useState(false);
+  const fontsLoaded = useAppFonts();
 
   useEffect(() => {
     migrate()
@@ -53,7 +55,7 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  if (!ready) return null;
+  if (!ready || !fontsLoaded) return null;
 
   return (
     <UserInactivityProvider>
@@ -63,15 +65,29 @@ export default function RootLayout() {
             value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
           >
             <Stack>
-              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="index"
+                options={{ headerShown: false, gestureEnabled: false }}
+              />
               <Stack.Screen
                 name="(modals)/white"
-                options={{ headerShown: false, animation: "none" }}
+                options={{
+                  headerShown: false,
+                  animation: "none",
+                  gestureEnabled: false,
+                }}
               />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="(tabs)"
+                options={{ headerShown: false, gestureEnabled: false }}
+              />
               <Stack.Screen
                 name="modal"
-                options={{ presentation: "modal", title: "Modal" }}
+                options={{
+                  presentation: "modal",
+                  title: "Modal",
+                  gestureEnabled: false,
+                }}
               />
             </Stack>
             <Toast />
