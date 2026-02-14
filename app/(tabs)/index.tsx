@@ -5,7 +5,14 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import GaugeHalfCircle from "@/src/components/GaugeCard";
 import { CategoryInput, listeCategories } from "@/src/db/repositories/category";
-import { addRecurringPayment } from "@/src/db/repositories/recurringRepo";
+import {
+  getMonthlyExpense,
+  getTotalBalance,
+} from "@/src/db/repositories/financeRepo";
+import {
+  addRecurringPayment,
+  listUpcomingRecurring,
+} from "@/src/db/repositories/recurringRepo";
 import {
   addTransaction,
   listTransactions,
@@ -39,6 +46,12 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
+  runOnJS,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -54,10 +67,11 @@ function toYYYYMMDD(d: Date) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-function prettyDate(d: Date) {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = d.getFullYear();
+function prettyDate(d: string) {
+  const date = new Date(d);
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yy = date.getFullYear();
   return `${dd}/${mm}/${yy}`;
 }
 function formatMoney(v: string) {
@@ -80,6 +94,13 @@ const REMIND_PRESETS = [0, 1, 2, 3, 7];
 const interval = Array(999)
   .fill(0)
   .map((_, i) => i + 1);
+
+// function Number ({ value }:any) {
+//   const {number} = useSpring([
+//     from: { number: 0 },
+//     numbe
+//   ])
+// }
 
 export default function HomeScreen() {
   const [user, setUser] = useState<LevelInfo | null>(null);
@@ -115,6 +136,24 @@ export default function HomeScreen() {
   const [keyReset, setKeyReset] = useState(0);
   const ref = useRef<BottomSheetRefProps>(null);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [frequencyTransaction, setFrequencyTransaction] = useState<any[]>([]);
+  const [balance, setBalance] = useState<{
+    income: number;
+    expense: number;
+    balance: number;
+  } | null>(null);
+  const [budgetInfo, setBudgetInfo] = useState<{
+    totalExpense: number;
+    totalBudget: number;
+    percentageUsed: number;
+    remainingBudget: number;
+  } | null>(null);
+  const [dates, setDates] = useState<string[]>([]);
+  const animatedValue = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+  const [targetValue, setTargetValue] = useState<number>(0);
+  const [solde, setSolde] = useState<number>(0);
 
   const OPTIONS = [
     { key: "entree", label: "Entrée" },
@@ -127,21 +166,6 @@ export default function HomeScreen() {
     month: "long",
     day: "numeric",
   };
-
-  // const openLow = () => ref.current?.scrollTo("low");
-  // const openMid = () => ref.current?.scrollTo("mid");
-  // const openHigh = () => ref.current?.scrollTo("high");
-  // const closeSheet = () => ref.current?.scrollTo("closed");
-
-  // const showModal = useCallback(async () => {
-  //   setOpenSheet(true);
-  //   ref.current?.scrollTo("high");
-  // }, []);
-
-  // const hideModal = useCallback(async () => {
-  //   setOpenSheet(false);
-  //   ref.current?.scrollTo("closed");
-  // }, []);
 
   const toggleSheet = useCallback(() => {
     const isActive = ref.current?.isActive?.();
@@ -206,7 +230,22 @@ export default function HomeScreen() {
 
   const getDatas = async () => {
     const transactions = await listTransactions(10);
+    setDates([...new Set(transactions.map((t) => t.date))]);
+    console.log("Transactions:", transactions);
+    console.log("Unique dates:", ...new Set(transactions.map((t) => t.date)));
+    const balance = await getTotalBalance();
+    animatedToValue(balance.balance);
+    const budgetInfo = await getMonthlyExpense();
+    console.log("Balance:", balance);
+    console.log("Budget Info:", budgetInfo);
     setTransactions(transactions);
+    setFrequencyTransaction(await listUpcomingRecurring(10));
+    console.log(
+      "Transactions récurrentes à venir:",
+      await listUpcomingRecurring(10),
+    );
+    setBalance(balance);
+    setBudgetInfo(budgetInfo);
   };
 
   useFocusEffect(
@@ -234,6 +273,7 @@ export default function HomeScreen() {
       remind_days_before: 2,
       active: 1,
     });
+    setOption("entree");
     setKeyReset((prev) => prev + 1);
   };
 
@@ -241,7 +281,7 @@ export default function HomeScreen() {
     console.log("Transaction data to save:", transactionData);
     if (
       transactionData.type !== "event" &&
-      (!transactionData.amount || transactionData.category_id === 0)
+      (transactionData.amount === "0" || transactionData.category_id === 0)
     ) {
       alert("Veuillez remplir tous les champs obligatoires.");
       return;
@@ -251,9 +291,9 @@ export default function HomeScreen() {
       transactionData.type === "event" &&
       (!transactionData.name ||
         !transactionData.frequency ||
-        !transactionData.amount ||
+        transactionData.amount === "0" ||
         transactionData.category_id === 0 ||
-        transactionData.next_date === new Date().toISOString().substring(0, 10))
+        transactionData.date === new Date().toISOString().substring(0, 10))
     ) {
       alert(
         "Veuillez remplir tous les champs obligatoires pour les charges mensuelles.",
@@ -295,8 +335,8 @@ export default function HomeScreen() {
         console.log("ID de la transaction ajoutée:", res);
       }
 
-      getDatas(); // Rafraîchir la liste des transactions
       resetData();
+      getDatas(); // Rafraîchir la liste des transactions
       toggleSheet();
     } catch (error) {
       alert(
@@ -304,6 +344,7 @@ export default function HomeScreen() {
       );
       console.error("Error saving transaction:", error);
     } finally {
+      resetData();
       setLoading(false);
     }
   };
@@ -322,6 +363,64 @@ export default function HomeScreen() {
       })),
     );
   };
+
+  const animatedToValue = (newValue: number) => {
+    scale.value = withTiming(1.2, { duration: 100 }, () => {
+      scale.value = withSpring(1, { damping: 100 });
+    });
+    opacity.value = withTiming(1.2, { duration: 100 }, () => {
+      opacity.value = withTiming(1, { duration: 200 });
+    });
+
+    animatedValue.value = withTiming(newValue, { duration: 1500 });
+    // RNAnimated.sequence([
+    //   RNAnimated.parallel([
+    //     RNAnimated.timing(scale, {
+    //       toValue: 0.2,
+    //       duration: 100,
+    //       useNativeDriver: true,
+    //     }),
+    //     RNAnimated.timing(opacity, {
+    //       toValue: 0.7,
+    //       duration: 100,
+    //       useNativeDriver: true,
+    //     }),
+    //   ]),
+    //   RNAnimated.parallel([
+    //     RNAnimated.spring(scale, {
+    //       toValue: 1,
+    //       friction: 3,
+    //       useNativeDriver: true,
+    //     }),
+    //     RNAnimated.timing(opacity, {
+    //       toValue: 1,
+    //       duration: 200,
+    //       useNativeDriver: true,
+    //     }),
+    //     RNAnimated.timing(animatedValue, {
+    //       toValue: newValue,
+    //       duration: 1500,
+    //       easing: Easing.out(Easing.exp),
+    //       useNativeDriver: false,
+    //     }),
+    //   ]),
+    // ]).start();
+    // setTargetValue(newValue);
+  };
+
+  useDerivedValue(() => {
+    runOnJS(setSolde)(animatedValue.value);
+  }, [animatedValue]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    };
+  });
+
+  // const increment = () => animatedToValue();
+  // const decrement = () => animatedToValue();
 
   const toggleSwitch = () =>
     setTransactionData({
@@ -423,15 +522,18 @@ export default function HomeScreen() {
             >
               Solde Total
             </ThemedText>
-            <ThemedText
-              style={{
-                fontFamily: FONT_FAMILY.bold,
-                color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                fontSize: 32,
-              }}
+            <Animated.Text
+              style={[
+                {
+                  fontFamily: FONT_FAMILY.bold,
+                  color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                  fontSize: 32,
+                },
+                animatedStyle,
+              ]}
             >
-              30 000 FCFA
-            </ThemedText>
+              {`${solde.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`}
+            </Animated.Text>
             <ThemedText
               style={{
                 fontFamily: FONT_FAMILY.regular,
@@ -452,9 +554,15 @@ export default function HomeScreen() {
               >
                 <View
                   style={{
-                    backgroundColor: COLORS.primary,
+                    backgroundColor: budgetInfo
+                      ? budgetInfo.percentageUsed >= 70
+                        ? COLORS.red
+                        : budgetInfo.percentageUsed >= 50
+                          ? COLORS.orange
+                          : COLORS.primary
+                      : COLORS.primary,
                     height: 10,
-                    width: "50%",
+                    width: budgetInfo ? `${budgetInfo.percentageUsed}%` : "0%",
                   }}
                 />
               </View>
@@ -474,9 +582,14 @@ export default function HomeScreen() {
                 >
                   Depensé :{" "}
                   <Text style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    15 000 FCFA{" "}
+                    {budgetInfo
+                      ? `${budgetInfo.totalExpense.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
+                      : "Loading..."}{" "}
                   </Text>
-                  / 20 000 FCFA
+                  /{" "}
+                  {budgetInfo
+                    ? `${budgetInfo.totalBudget.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
+                    : "Loading..."}
                 </ThemedText>
 
                 <Text
@@ -486,7 +599,9 @@ export default function HomeScreen() {
                     fontSize: 12,
                   }}
                 >
-                  50%
+                  {budgetInfo
+                    ? `${budgetInfo.percentageUsed.toFixed(0)}%`
+                    : "Loading..."}
                 </Text>
               </View>
             </View>
@@ -541,55 +656,88 @@ export default function HomeScreen() {
               style={{ gap: 12, marginTop: 10 }}
               contentContainerStyle={{ gap: 13 }}
             >
-              <TouchableOpacity
-                style={{
-                  borderRadius: 16,
-                  overflow: "hidden",
-                  padding: 10,
-                  backgroundColor:
-                    color === "#FFFFFF" ? COLORS.noir : COLORS.white,
-                  gap: 8,
-                }}
-              >
-                <Image
-                  source={require("../../assets/images/netflix.png")}
-                  style={{ width: 70, height: 70, borderRadius: 16 }}
-                />
-                <ThemedText style={{ fontFamily: "SemiBold" }}>
-                  Abonnement NetFlix
-                </ThemedText>
-                <ThemedText style={{ fontFamily: "Regular", fontSize: 12 }}>
-                  15 Septembre
-                </ThemedText>
-                <ThemedText style={{ fontFamily: "Bold" }}>
-                  2 400 FCFA
-                </ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={{
-                  borderRadius: 16,
-                  overflow: "hidden",
-                  padding: 10,
-                  backgroundColor:
-                    color === "#FFFFFF" ? COLORS.noir : COLORS.white,
-                  gap: 8,
-                }}
-              >
-                <Image
-                  source={require("../../assets/images/chatgpt.png")}
-                  style={{ width: 70, height: 70, borderRadius: 16 }}
-                />
-                <ThemedText style={{ fontFamily: "SemiBold" }}>
-                  Abonnement ChatGPT
-                </ThemedText>
-                <ThemedText style={{ fontFamily: "Regular", fontSize: 12 }}>
-                  15 Septembre
-                </ThemedText>
-                <ThemedText style={{ fontFamily: "Bold" }}>
-                  11 000 FCFA
-                </ThemedText>
-              </TouchableOpacity>
+              {frequencyTransaction.length === 0 ? (
+                <View></View>
+              ) : (
+                <>
+                  {frequencyTransaction.map((t: any) => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={{
+                        borderRadius: 16,
+                        overflow: "hidden",
+                        padding: 10,
+                        backgroundColor:
+                          color === "#FFFFFF" ? COLORS.noir : COLORS.white,
+                        gap: 8,
+                        width: 200,
+                      }}
+                    >
+                      <Image
+                        source={
+                          t.name.toLowerCase().includes("netflix")
+                            ? require("../../assets/images/netflix.png")
+                            : t.name.toLowerCase().includes("loyer")
+                              ? require("../../assets/images/3d-house.png")
+                              : t.name.toLowerCase().includes("amazon")
+                                ? require("../../assets/images/amazon.png")
+                                : t.name.toLowerCase().includes("facture")
+                                  ? require("../../assets/images/bill.png")
+                                  : t.name.toLowerCase().includes("canca")
+                                    ? require("../../assets/images/canva.jpg")
+                                    : t.name.toLowerCase().includes("chatgpt")
+                                      ? require("../../assets/images/chatgpt.png")
+                                      : t.name
+                                            .toLowerCase()
+                                            .includes("facebook")
+                                        ? require("../../assets/images/facebook.png")
+                                        : t.name
+                                              .toLowerCase()
+                                              .includes("gemini")
+                                          ? require("../../assets/images/gemini.jpg")
+                                          : t.name
+                                                .toLowerCase()
+                                                .includes("spotify")
+                                            ? require("../../assets/images/spotify.png")
+                                            : t.name
+                                                  .toLowerCase()
+                                                  .includes("instagram")
+                                              ? require("../../assets/images/instagram.png")
+                                              : t.name
+                                                    .toLowerCase()
+                                                    .includes("prime")
+                                                ? require("../../assets/images/prime.png")
+                                                : t.name
+                                                      .toLowerCase()
+                                                      .includes("tiktok")
+                                                  ? require("../../assets/images/tiktok.png")
+                                                  : t.name
+                                                        .toLowerCase()
+                                                        .includes("upwork")
+                                                    ? require("../../assets/images/upwork.png")
+                                                    : t.name
+                                                          .toLowerCase()
+                                                          .includes("youtube")
+                                                      ? require("../../assets/images/youtube.png")
+                                                      : require("../../assets/images/schedule.png")
+                        }
+                        style={{ width: 70, height: 70, borderRadius: 16 }}
+                      />
+                      <ThemedText style={{ fontFamily: "SemiBold" }}>
+                        {t.name}
+                      </ThemedText>
+                      <ThemedText
+                        style={{ fontFamily: "Regular", fontSize: 12 }}
+                      >
+                        15 Septembre
+                      </ThemedText>
+                      <ThemedText style={{ fontFamily: "Bold" }}>
+                        {formatMoney(t.amount)} FCFA
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
             </ScrollView>
           </View>
           {/* Fin Payement à venir */}
@@ -615,170 +763,131 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            <View>
-              {/* Date */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  // backgroundColor:
-                  //   color === "#FFFFFF" ? COLORS.noir : COLORS.white,
-                  padding: 10,
-                  // borderRadius: 16,
-                  alignItems: "center",
-                }}
-              >
-                <ThemedText>01/02/2026</ThemedText>
+            {[...new Set(transactions.map((t) => t.date))].map((date: any) => (
+              <View>
+                {/* Date */}
                 <View
+                  key={date}
                   style={{
-                    backgroundColor:
-                      color === "#FFFFFF"
-                        ? COLORS.secondary
-                        : "rgba(0, 0, 0, 0.14)",
-                    height: 2,
-                    borderRadius: 5,
-                    overflow: "hidden",
-                    width: "75%",
-                    right: 0,
-                    marginLeft: 10,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    // backgroundColor:
+                    //   color === "#FFFFFF" ? COLORS.noir : COLORS.white,
+                    padding: 10,
+                    // borderRadius: 16,
+                    alignItems: "center",
                   }}
-                />
-              </View>
-              {/* Fin Date */}
-
-              {/* transactions */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  // width: "100%",
-                  gap: 8,
-                }}
-              >
-                <Image
-                  source={require("../../assets/images/expense.png")}
-                  tintColor={color === "#FFFFFF" ? COLORS.white : COLORS.dark}
-                  style={{ width: 60, height: 60 }}
-                />
-                <View
-                  style={{ flexDirection: "column", gap: 4, width: "100%" }}
                 >
+                  <ThemedText>{prettyDate(date)}</ThemedText>
                   <View
                     style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "80%",
+                      backgroundColor:
+                        color === "#FFFFFF"
+                          ? COLORS.secondary
+                          : "rgba(0, 0, 0, 0.14)",
+                      height: 2,
+                      borderRadius: 5,
+                      overflow: "hidden",
+                      width: "75%",
+                      right: 0,
+                      marginLeft: 10,
                     }}
-                  >
-                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                      Achat de crédit
-                    </ThemedText>
-                    <ThemedText
-                      style={{
-                        fontFamily: FONT_FAMILY.bold,
-                        fontSize: 14,
-                        color: COLORS.red,
-                      }}
-                    >
-                      1 000 CFA
-                    </ThemedText>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "80%",
-                    }}
-                  >
-                    <ThemedText
-                      style={{
-                        fontFamily: FONT_FAMILY.regular,
-                        color: COLORS.gray,
-                      }}
-                    >
-                      Abonnement
-                    </ThemedText>
-                    <ThemedText
-                      style={{
-                        fontFamily: FONT_FAMILY.regular,
-                        fontSize: 14,
-                        color: COLORS.gray,
-                      }}
-                    >
-                      Dépense
-                    </ThemedText>
-                  </View>
+                  />
                 </View>
-              </View>
+                {/* Fin Date */}
 
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  // width: "100%",
-                  gap: 8,
-                }}
-              >
-                <Image
-                  source={require("../../assets/images/income.png")}
-                  tintColor={color === "#FFFFFF" ? COLORS.white : COLORS.dark}
-                  style={{ width: 60, height: 60 }}
-                />
-                <View
-                  style={{ flexDirection: "column", gap: 4, width: "100%" }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "80%",
-                    }}
-                  >
-                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                      Freelance
-                    </ThemedText>
-                    <ThemedText
+                {/* transactions */}
+                {transactions
+                  .filter((t) => t.date === date)
+                  .map((transaction: any) => (
+                    <View
+                      key={transaction.id}
                       style={{
-                        fontFamily: FONT_FAMILY.bold,
-                        fontSize: 14,
-                        color: COLORS.green,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        // width: "100%",
+                        gap: 8,
                       }}
                     >
-                      100 000 CFA
-                    </ThemedText>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "80%",
-                    }}
-                  >
-                    <ThemedText
-                      style={{
-                        fontFamily: FONT_FAMILY.regular,
-                        color: COLORS.gray,
-                      }}
-                    >
-                      Travail
-                    </ThemedText>
-                    <ThemedText
-                      style={{
-                        fontFamily: FONT_FAMILY.regular,
-                        fontSize: 14,
-                        color: COLORS.gray,
-                      }}
-                    >
-                      Revenu
-                    </ThemedText>
-                  </View>
-                </View>
+                      <Image
+                        source={
+                          transaction.type === "depense"
+                            ? require("../../assets/images/expense.png")
+                            : require("../../assets/images/income.png")
+                        }
+                        tintColor={
+                          color === "#FFFFFF" ? COLORS.white : COLORS.dark
+                        }
+                        style={{ width: 60, height: 60 }}
+                      />
+                      <View
+                        style={{
+                          flexDirection: "column",
+                          gap: 4,
+                          width: "100%",
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            width: "80%",
+                          }}
+                        >
+                          <ThemedText
+                            style={{ fontFamily: FONT_FAMILY.semibold }}
+                          >
+                            {transaction.note}
+                          </ThemedText>
+                          <ThemedText
+                            style={{
+                              fontFamily: FONT_FAMILY.bold,
+                              fontSize: 14,
+                              color:
+                                transaction.type === "depense"
+                                  ? COLORS.red
+                                  : COLORS.green,
+                            }}
+                          >
+                            {transaction.amount} CFA
+                          </ThemedText>
+                        </View>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            width: "80%",
+                          }}
+                        >
+                          <ThemedText
+                            style={{
+                              fontFamily: FONT_FAMILY.regular,
+                              color: COLORS.gray,
+                            }}
+                          >
+                            {OldCategories.find(
+                              (c) => c.id === transaction.category_id,
+                            )?.name || "Autre"}
+                          </ThemedText>
+                          <ThemedText
+                            style={{
+                              fontFamily: FONT_FAMILY.regular,
+                              fontSize: 14,
+                              color: COLORS.gray,
+                            }}
+                          >
+                            {transaction.type === "depense"
+                              ? "Dépense"
+                              : "Revenu"}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
               </View>
-            </View>
+            ))}
           </View>
           {/* Fin Liste des transactions */}
 

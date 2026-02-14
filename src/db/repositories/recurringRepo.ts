@@ -1,3 +1,9 @@
+import { checkRecurringBadges } from "@/src/services/badges/badgeService";
+import {
+  formatDateYYYYMMDD,
+  updateDailyMissions,
+} from "@/src/services/gamification/daily";
+import { reward } from "@/src/services/gamification/xpService";
 import {
   cancelRecurringNotifications,
   scheduleRecurringNotifications,
@@ -55,6 +61,11 @@ export async function addRecurringPayment(input: RecurringInput) {
       remindDaysBefore: remind,
     });
   }
+
+  await checkRecurringBadges(1);
+
+  await reward("ADD_RECURRING", recurringId);
+  await updateDailyMissions(formatDateYYYYMMDD(new Date()), "ADD_RECURRING");
 
   return recurringId;
 }
@@ -126,7 +137,7 @@ export async function setRecurringActive(id: number, active: 0 | 1) {
   await updateRecurringPayment(id, { active });
 }
 
-export async function listUpcomingRecurring(daysAhead = 60) {
+export async function listUpcomingRecurring(daysAhead = 60, limit = 50) {
   // événements à venir "propres"
   return all<{
     id: number;
@@ -144,8 +155,9 @@ export async function listUpcomingRecurring(daysAhead = 60) {
     WHERE active=1
       AND next_date <= date('now', ?)
     ORDER BY next_date ASC
+    LIMIT ?
     `,
-    [`+${daysAhead} day`],
+    [`+${daysAhead} day`, limit],
   );
 }
 
