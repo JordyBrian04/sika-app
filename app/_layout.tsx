@@ -89,6 +89,10 @@ export default function RootLayout() {
                   gestureEnabled: false,
                 }}
               />
+              <Stack.Screen
+                name="(screens)/DetailBudget"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
             </Stack>
             <Toast />
             <StatusBar style="auto" />

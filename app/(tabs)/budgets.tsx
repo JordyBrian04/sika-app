@@ -4,6 +4,8 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import {
   addBudget,
+  deleteBudget,
+  editBudget,
   getCategoryMonthlyExpense,
 } from "@/src/db/repositories/budgetRepo";
 import { listeCategories } from "@/src/db/repositories/category";
@@ -16,11 +18,14 @@ import {
   MaterialIcons,
 } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -39,6 +44,7 @@ export default function TabTwoScreen() {
   const [datas, setDatas] = useState<any[]>([]);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [budgetDataset, setBudgetDataset] = useState<any>({
+    id: 0,
     mois: currentMonth,
     categorie: 0,
     annee: currentYear,
@@ -47,6 +53,7 @@ export default function TabTwoScreen() {
   const ref = useRef<BottomSheetRefProps>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const [loading, setLoading] = useState(false);
+  const [action, setAction] = useState<"add" | "edit">("add");
   const [categories, setCategories] = useState<
     { key: number; value: string }[]
   >([]);
@@ -64,6 +71,7 @@ export default function TabTwoScreen() {
     { value: "Novembre", key: 11 },
     { value: "Décembre", key: 12 },
   ];
+  const [keyReset, setKeyReset] = useState(0);
 
   const toggleSheet = useCallback(() => {
     const isActive = ref.current?.isActive?.();
@@ -97,14 +105,16 @@ export default function TabTwoScreen() {
       mois: currentMonth,
       categorie: 0,
       annee: currentYear,
-      montantLimite: "0",
+      montant: "0",
     });
+    setAction("add");
+    setKeyReset((prev) => prev + 1);
   };
 
   const handleSaveBudget = async () => {
     if (
       !budgetDataset.categorie ||
-      Number(budgetDataset.montantLimite) <= 0 ||
+      Number(budgetDataset.montant) <= 0 ||
       !budgetDataset.mois ||
       budgetDataset.annee === ""
     ) {
@@ -114,12 +124,22 @@ export default function TabTwoScreen() {
 
     setLoading(true);
     try {
-      await addBudget(
-        budgetDataset.mois,
-        budgetDataset.annee,
-        budgetDataset.categorie,
-        budgetDataset.montantLimite,
-      );
+      if (action === "add") {
+        await addBudget(
+          budgetDataset.mois,
+          budgetDataset.annee,
+          budgetDataset.categorie,
+          budgetDataset.montant,
+        );
+      } else {
+        await editBudget(
+          budgetDataset.id,
+          budgetDataset.mois,
+          budgetDataset.annee,
+          budgetDataset.categorie,
+          budgetDataset.montant,
+        );
+      }
       resetDataset();
       toggleSheet();
       fetchDatas();
@@ -130,7 +150,54 @@ export default function TabTwoScreen() {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    Alert.alert(
+      "Confirmer la suppression",
+      "Êtes-vous sûr de vouloir supprimer ce budget ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteBudget(id);
+              fetchDatas();
+            } catch (error) {
+              alert("Erreur lors de la suppression du budget");
+              console.warn("Error deleting budget:", error);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleEdit = async (id: number) => {
+    // Récupérer les données du budget à éditer
+    const budgetToEdit = datas.find((b) => b.id === id);
+    if (!budgetToEdit) {
+      alert("Budget non trouvé");
+      return;
+    }
+
+    // Pré-remplir le dataset avec les données existantes
+    setBudgetDataset({
+      id: budgetToEdit.id,
+      mois: budgetToEdit.month,
+      annee: budgetToEdit.year,
+      categorie: budgetToEdit.categoryId,
+      montant: budgetToEdit.monthlyLimit.toString(),
+    });
+
+    setAction("edit");
+
+    // Ouvrir le bottom sheet pour édition
+    toggleSheet();
+  };
+
   const renderBudgetItem = ({ item }: any) => {
+    // console.log("Rendering item:", item);
     return (
       <TouchableOpacity
         key={item.id}
@@ -140,6 +207,12 @@ export default function TabTwoScreen() {
           borderRadius: 8,
           gap: 15,
         }}
+        onPress={() =>
+          router.push({
+            pathname: "/(screens)/DetailBudget",
+            params: { id: item.id },
+          })
+        }
       >
         <View
           style={{
@@ -274,6 +347,66 @@ export default function TabTwoScreen() {
             {`${item.percentageUsed.toFixed(0)} %`} du budget déjà utilisé
           </ThemedText>
         </View>
+
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <TouchableOpacity
+            style={{
+              padding: 8,
+              gap: 7,
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor:
+                color === "#FFFFFF" ? COLORS.secondary : COLORS.dark,
+              borderRadius: 8,
+              justifyContent: "center",
+              width: "48%",
+            }}
+            onPress={() => handleEdit(item.id)}
+          >
+            <Feather
+              name="edit"
+              size={24}
+              color={color === "#FFFFFF" ? COLORS.dark : COLORS.secondary}
+            />
+            <Text
+              style={{
+                color: color === "#FFFFFF" ? COLORS.dark : COLORS.secondary,
+                fontFamily: FONT_FAMILY.medium,
+              }}
+            >
+              Modifier
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              padding: 8,
+              gap: 7,
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: COLORS.red,
+              borderRadius: 8,
+              justifyContent: "center",
+              width: "48%",
+            }}
+            onPress={() => handleDelete(item.id)}
+          >
+            <Feather name="trash-2" size={24} color={COLORS.secondary} />
+            <Text
+              style={{
+                color: COLORS.secondary,
+                fontFamily: FONT_FAMILY.medium,
+              }}
+            >
+              Supprimer
+            </Text>
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -284,6 +417,9 @@ export default function TabTwoScreen() {
         contentInsetAdjustmentBehavior="automatic"
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 10, gap: 20 }}
+        refreshControl={
+          <RefreshControl onRefresh={fetchDatas} refreshing={loading} />
+        }
       >
         <ThemedText style={{ fontSize: 20, fontFamily: FONT_FAMILY.bold }}>
           💰 Mon budget mensuel
@@ -383,7 +519,7 @@ export default function TabTwoScreen() {
           }}
         >
           <ThemedText style={{ fontSize: 18, fontFamily: FONT_FAMILY.bold }}>
-            🎯 Créer un budget pour{" "}
+            🎯 Créer/modifier un budget pour{" "}
             {MOIS.find((m) => m.key === currentMonth)?.value} {currentYear}
           </ThemedText>
 
@@ -407,6 +543,7 @@ export default function TabTwoScreen() {
                 setSelected={(val: any) =>
                   setBudgetDataset({ ...budgetDataset, mois: Number(val) })
                 }
+                key={keyReset}
                 data={MOIS}
                 defaultOption={{
                   key: currentMonth,
@@ -475,6 +612,12 @@ export default function TabTwoScreen() {
               arrowicon={
                 <Feather name="chevron-down" size={24} color={color} />
               }
+              defaultOption={{
+                key: budgetDataset.categorie,
+                value:
+                  categories.find((c) => c.key === budgetDataset.categorie)
+                    ?.value || "Catégorie",
+              }}
             />
           </View>
           <View style={{ zIndex: 10, gap: 6, width: "100%" }}>
@@ -486,11 +629,11 @@ export default function TabTwoScreen() {
             <TextInput
               placeholder="0"
               placeholderTextColor={color}
-              value={budgetDataset.montantLimite}
+              value={budgetDataset.montant.toString()}
               onChangeText={(text) =>
                 setBudgetDataset({
                   ...budgetDataset,
-                  montantLimite: Number(text) || 0,
+                  montant: Number(text) || 0,
                 })
               }
               keyboardType="numeric"

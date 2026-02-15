@@ -137,7 +137,8 @@ export async function setRecurringActive(id: number, active: 0 | 1) {
   await updateRecurringPayment(id, { active });
 }
 
-export async function listUpcomingRecurring(daysAhead = 60, limit = 50) {
+export async function listUpcomingRecurring(limit = 50, daysAhead = 60) {
+  const dateModifier = `+${daysAhead} days`;
   // événements à venir "propres"
   return all<{
     id: number;
@@ -157,7 +158,7 @@ export async function listUpcomingRecurring(daysAhead = 60, limit = 50) {
     ORDER BY next_date ASC
     LIMIT ?
     `,
-    [`+${daysAhead} day`, limit],
+    [dateModifier, limit],
   );
 }
 

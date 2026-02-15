@@ -33,6 +33,7 @@ import {
   Dimensions,
   Image,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -458,6 +459,12 @@ export default function HomeScreen() {
           }}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={() => [getConstant(), getDatas()]}
+            />
+          }
         >
           <View
             style={{
@@ -657,7 +664,19 @@ export default function HomeScreen() {
               contentContainerStyle={{ gap: 13 }}
             >
               {frequencyTransaction.length === 0 ? (
-                <View></View>
+                <View>
+                  <ThemedText
+                    style={{
+                      textAlign: "center",
+                      marginTop: 50,
+                      color: "#808080",
+                      fontFamily: FONT_FAMILY.medium,
+                    }}
+                  >
+                    Aucune transaction récurrente à venir dans les 60 prochains
+                    jours.
+                  </ThemedText>
+                </View>
               ) : (
                 <>
                   {frequencyTransaction.map((t: any) => (
@@ -729,7 +748,10 @@ export default function HomeScreen() {
                       <ThemedText
                         style={{ fontFamily: "Regular", fontSize: 12 }}
                       >
-                        15 Septembre
+                        {new Date(t.next_date).toLocaleDateString("fr-FR", {
+                          day: "numeric",
+                          month: "long",
+                        })}
                       </ThemedText>
                       <ThemedText style={{ fontFamily: "Bold" }}>
                         {formatMoney(t.amount)} FCFA
@@ -763,131 +785,141 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {[...new Set(transactions.map((t) => t.date))].map((date: any) => (
-              <View>
-                {/* Date */}
-                <View
-                  key={date}
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    // backgroundColor:
-                    //   color === "#FFFFFF" ? COLORS.noir : COLORS.white,
-                    padding: 10,
-                    // borderRadius: 16,
-                    alignItems: "center",
-                  }}
-                >
-                  <ThemedText>{prettyDate(date)}</ThemedText>
+            {[...new Set(transactions.map((t) => t.date))].map(
+              (date: any, index: number) => (
+                <View key={index}>
+                  {/* Date */}
                   <View
+                    key={date}
                     style={{
-                      backgroundColor:
-                        color === "#FFFFFF"
-                          ? COLORS.secondary
-                          : "rgba(0, 0, 0, 0.14)",
-                      height: 2,
-                      borderRadius: 5,
-                      overflow: "hidden",
-                      width: "75%",
-                      right: 0,
-                      marginLeft: 10,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      // backgroundColor:
+                      //   color === "#FFFFFF" ? COLORS.noir : COLORS.white,
+                      padding: 10,
+                      // borderRadius: 16,
+                      alignItems: "center",
                     }}
-                  />
-                </View>
-                {/* Fin Date */}
-
-                {/* transactions */}
-                {transactions
-                  .filter((t) => t.date === date)
-                  .map((transaction: any) => (
+                  >
+                    <ThemedText>{prettyDate(date)}</ThemedText>
                     <View
-                      key={transaction.id}
                       style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        // width: "100%",
-                        gap: 8,
+                        backgroundColor:
+                          color === "#FFFFFF"
+                            ? COLORS.secondary
+                            : "rgba(0, 0, 0, 0.14)",
+                        height: 2,
+                        borderRadius: 5,
+                        overflow: "hidden",
+                        width: "75%",
+                        right: 0,
+                        marginLeft: 10,
                       }}
-                    >
-                      <Image
-                        source={
-                          transaction.type === "depense"
-                            ? require("../../assets/images/expense.png")
-                            : require("../../assets/images/income.png")
-                        }
-                        tintColor={
-                          color === "#FFFFFF" ? COLORS.white : COLORS.dark
-                        }
-                        style={{ width: 60, height: 60 }}
-                      />
+                    />
+                  </View>
+                  {/* Fin Date */}
+
+                  {/* transactions */}
+                  {transactions
+                    .filter((t) => t.date === date)
+                    .map((transaction: any) => (
                       <View
+                        key={transaction.id}
                         style={{
-                          flexDirection: "column",
-                          gap: 4,
-                          width: "100%",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          // width: "100%",
+                          gap: 8,
                         }}
                       >
+                        <Image
+                          source={
+                            transaction.type === "depense"
+                              ? require("../../assets/images/expense.png")
+                              : require("../../assets/images/income.png")
+                          }
+                          tintColor={
+                            color === "#FFFFFF" ? COLORS.white : COLORS.dark
+                          }
+                          style={{ width: 60, height: 60 }}
+                        />
                         <View
                           style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            width: "80%",
+                            flexDirection: "column",
+                            gap: 4,
+                            width: "100%",
                           }}
                         >
-                          <ThemedText
-                            style={{ fontFamily: FONT_FAMILY.semibold }}
-                          >
-                            {transaction.note}
-                          </ThemedText>
-                          <ThemedText
+                          <View
                             style={{
-                              fontFamily: FONT_FAMILY.bold,
-                              fontSize: 14,
-                              color:
-                                transaction.type === "depense"
-                                  ? COLORS.red
-                                  : COLORS.green,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              width: "80%",
                             }}
                           >
-                            {transaction.amount} CFA
-                          </ThemedText>
-                        </View>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            width: "80%",
-                          }}
-                        >
-                          <ThemedText
+                            <ThemedText
+                              style={{
+                                fontFamily: FONT_FAMILY.semibold,
+                                width: "60%",
+                                // ellipsizeMode: "tail",
+                                // flexWrap: "wrap",
+                              }}
+                              ellipsizeMode="tail"
+                              numberOfLines={1}
+                            >
+                              {transaction.note}
+                            </ThemedText>
+                            <ThemedText
+                              style={{
+                                fontFamily: FONT_FAMILY.bold,
+                                fontSize: 14,
+                                textAlign: "right",
+                                color:
+                                  transaction.type === "depense"
+                                    ? COLORS.red
+                                    : COLORS.green,
+                              }}
+                            >
+                              {transaction.amount} CFA
+                            </ThemedText>
+                          </View>
+                          <View
                             style={{
-                              fontFamily: FONT_FAMILY.regular,
-                              color: COLORS.gray,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              width: "80%",
                             }}
                           >
-                            {OldCategories.find(
-                              (c) => c.id === transaction.category_id,
-                            )?.name || "Autre"}
-                          </ThemedText>
-                          <ThemedText
-                            style={{
-                              fontFamily: FONT_FAMILY.regular,
-                              fontSize: 14,
-                              color: COLORS.gray,
-                            }}
-                          >
-                            {transaction.type === "depense"
-                              ? "Dépense"
-                              : "Revenu"}
-                          </ThemedText>
+                            <ThemedText
+                              style={{
+                                fontFamily: FONT_FAMILY.regular,
+                                color: COLORS.gray,
+                              }}
+                            >
+                              {OldCategories.find(
+                                (c) => c.id === transaction.category_id,
+                              )?.name || "Autre"}
+                            </ThemedText>
+                            <ThemedText
+                              style={{
+                                fontFamily: FONT_FAMILY.regular,
+                                fontSize: 14,
+                                color: COLORS.gray,
+                              }}
+                            >
+                              {transaction.type === "depense"
+                                ? "Dépense"
+                                : "Revenu"}
+                            </ThemedText>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  ))}
-              </View>
-            ))}
+                    ))}
+                </View>
+              ),
+            )}
           </View>
           {/* Fin Liste des transactions */}
 

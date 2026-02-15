@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 4;
+export const DB_VERSION = 6;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -197,4 +197,18 @@ export const migrations: Record<number, string[]> = {
       ON recurring_due_queue(status, due_date);`,
   ],
   5: [`ALTER TABLE recurring_payments ADD COLUMN custom_unit TEXT;`],
+  6: [
+    `CREATE TABLE IF NOT EXISTS recurring_due_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recurring_id INTEGER NOT NULL,
+        due_date TEXT NOT NULL,                 -- 'YYYY-MM-DD' (occurrence)
+        status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'skipped'
+        decided_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(recurring_id, due_date),
+        FOREIGN KEY (recurring_id) REFERENCES recurring_payments(id) ON DELETE CASCADE
+      );`,
+    `CREATE INDEX IF NOT EXISTS idx_due_queue_status_date
+      ON recurring_due_queue(status, due_date);`,
+  ],
 };
