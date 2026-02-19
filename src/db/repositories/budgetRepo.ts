@@ -98,10 +98,9 @@ export async function editBudget(
   );
 }
 
-export async function getBudgetDetailByID(id: number) {
+export async function getBudgetDetailByID(id: number, periode: string) {
   console.log("Getting budget detail for ID:", id);
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1; // getMonth() returns 0-11
+  const [year, month] = periode.split("-").map(Number);
 
   const rows = await all<{
     category_id: number;
@@ -120,13 +119,13 @@ export async function getBudgetDetailByID(id: number) {
      LEFT JOIN transactions t ON c.id = t.category_id AND t.type = 'depense' AND strftime('%m', t.date) = ? AND strftime('%Y', t.date) = ?
      WHERE b.id = ?
      GROUP BY b.category_id, c.name`,
-    [currentMonth.toString().padStart(2, "0"), currentYear.toString(), id],
+    [month.toString().padStart(2, "0"), year.toString(), id],
   );
 
   return rows.map((row) => ({
     id: id,
     // month: month,
-    // year: currentYear,
+    // year: year,
     categoryId: row.category_id,
     categoryName: row.category_name,
     monthlyLimit: row.monthly_limit ?? 0,
