@@ -26,7 +26,7 @@ import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PlatformPressable } from "@react-navigation/elements";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -650,7 +650,9 @@ export default function HomeScreen() {
               >
                 Paiement à venir
               </ThemedText>
-              <TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.navigate("/(screens)/IncomingEvent")}
+              >
                 <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
                   Voir plus
                 </ThemedText>
@@ -778,7 +780,9 @@ export default function HomeScreen() {
               >
                 Reçentes transactions
               </ThemedText>
-              <TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.navigate("/(screens)/ListeTransactions")}
+              >
                 <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
                   Voir plus
                 </ThemedText>
@@ -823,26 +827,114 @@ export default function HomeScreen() {
                   {transactions
                     .filter((t) => t.date === date)
                     .map((transaction: any) => (
-                      <View
+                      <TouchableOpacity
                         key={transaction.id}
                         style={{
                           flexDirection: "row",
                           alignItems: "center",
                           // width: "100%",
                           gap: 8,
+                          marginBottom: 10,
                         }}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(screens)/DetailTransactions",
+                            params: {
+                              id: transaction.id,
+                              amount: transaction.amount,
+                              note: transaction.note,
+                              date: transaction.date,
+                              name: transaction.category_name,
+                              type: transaction.type,
+                              created_at: transaction.created_at,
+                            },
+                          })
+                        }
                       >
-                        <Image
-                          source={
-                            transaction.type === "depense"
-                              ? require("../../assets/images/expense.png")
-                              : require("../../assets/images/income.png")
-                          }
-                          tintColor={
-                            color === "#FFFFFF" ? COLORS.white : COLORS.dark
-                          }
-                          style={{ width: 60, height: 60 }}
-                        />
+                        <View
+                          style={{
+                            backgroundColor:
+                              color === "#FFFFFF"
+                                ? COLORS.secondary
+                                : COLORS.dark,
+                            padding: 15,
+                            borderRadius: 8,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 15,
+                            width: 60,
+                            justifyContent: "center",
+                            height: 60,
+                          }}
+                        >
+                          <Image
+                            source={
+                              transaction.category_name
+                                ?.toLowerCase()
+                                .includes("alimentation")
+                                ? require("../../assets/images/diet.png")
+                                : transaction.category_name
+                                      ?.toLowerCase()
+                                      .includes("transport")
+                                  ? require("../../assets/images/transportation.png")
+                                  : transaction.category_name
+                                        ?.toLowerCase()
+                                        .includes("facture")
+                                    ? require("../../assets/images/bill.png")
+                                    : transaction.category_name
+                                          ?.toLowerCase()
+                                          .includes("abonnement")
+                                      ? require("../../assets/images/membership.png")
+                                      : transaction.category_name
+                                            ?.toLowerCase()
+                                            .includes("sante")
+                                        ? require("../../assets/images/pills.png")
+                                        : transaction.category_name
+                                              ?.toLowerCase()
+                                              .includes("loisirs")
+                                          ? require("../../assets/images/theater.png")
+                                          : transaction.category_name
+                                                ?.toLowerCase()
+                                                .includes("salaire")
+                                            ? require("../../assets/images/payroll.png")
+                                            : transaction.category_name
+                                                  ?.toLowerCase()
+                                                  .includes("depart")
+                                              ? require("../../assets/images/salary.png")
+                                              : transaction.category_name
+                                                    ?.toLowerCase()
+                                                    .includes("mission")
+                                                ? require("../../assets/images/mission.png")
+                                                : transaction.category_name
+                                                      ?.toLowerCase()
+                                                      .includes("famille")
+                                                  ? require("../../assets/images/big-family.png")
+                                                  : transaction.category_name
+                                                        ?.toLowerCase()
+                                                        .includes("education")
+                                                    ? require("../../assets/images/stack-of-books.png")
+                                                    : transaction.category_name
+                                                          ?.toLowerCase()
+                                                          .includes("shopping")
+                                                      ? require("../../assets/images/online-shopping.png")
+                                                      : transaction.category_name
+                                                            ?.toLowerCase()
+                                                            .includes(
+                                                              "téléphone/internet",
+                                                            )
+                                                        ? require("../../assets/images/iphone.png")
+                                                        : transaction.category_name
+                                                              ?.toLowerCase()
+                                                              .includes("soin")
+                                                          ? require("../../assets/images/lotions.png")
+                                                          : require("../../assets/images/shapes.png")
+                            }
+                            // tintColor={
+                            //   color === "#FFFFFF" ? COLORS.white : COLORS.dark
+                            // }
+                            style={{ width: 40, height: 40 }}
+                          />
+                        </View>
                         <View
                           style={{
                             flexDirection: "column",
@@ -881,7 +973,7 @@ export default function HomeScreen() {
                                     : COLORS.green,
                               }}
                             >
-                              {transaction.amount} CFA
+                              {formatMoney(transaction.amount)} CFA
                             </ThemedText>
                           </View>
                           <View
@@ -898,9 +990,7 @@ export default function HomeScreen() {
                                 color: COLORS.gray,
                               }}
                             >
-                              {OldCategories.find(
-                                (c) => c.id === transaction.category_id,
-                              )?.name || "Autre"}
+                              {transaction.category_name || "Autre"}
                             </ThemedText>
                             <ThemedText
                               style={{
@@ -915,7 +1005,7 @@ export default function HomeScreen() {
                             </ThemedText>
                           </View>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     ))}
                 </View>
               ),

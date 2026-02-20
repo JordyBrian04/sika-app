@@ -10,13 +10,7 @@ import {
 } from "@/src/db/repositories/budgetRepo";
 import { listeCategories } from "@/src/db/repositories/category";
 import { FONT_FAMILY } from "@/src/theme/fonts";
-import {
-  AntDesign,
-  Feather,
-  FontAwesome5,
-  Ionicons,
-  MaterialIcons,
-} from "@expo/vector-icons";
+import { AntDesign, Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -25,6 +19,7 @@ import {
   Alert,
   Dimensions,
   FlatList,
+  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -83,7 +78,7 @@ export default function TabTwoScreen() {
     const cats = await listeCategories();
     setCategories(
       cats
-        .filter((c) => c.type === "depense")
+        .filter((c) => c.type === "depense" || c.type === "event")
         .map((c) => ({ key: c.id, value: c.name })),
     );
   };
@@ -235,10 +230,55 @@ export default function TabTwoScreen() {
               height: 60,
             }}
           >
-            <MaterialIcons
-              name="category"
-              size={30}
-              color={color === "#FFFFFF" ? COLORS.dark : COLORS.secondary}
+            <Image
+              source={
+                item.categoryName.toLowerCase().includes("alimentation")
+                  ? require("../../assets/images/diet.png")
+                  : item.categoryName.toLowerCase().includes("transport")
+                    ? require("../../assets/images/transportation.png")
+                    : item.categoryName.toLowerCase().includes("facture")
+                      ? require("../../assets/images/bill.png")
+                      : item.categoryName.toLowerCase().includes("abonnement")
+                        ? require("../../assets/images/membership.png")
+                        : item.categoryName.toLowerCase().includes("sante")
+                          ? require("../../assets/images/pills.png")
+                          : item.categoryName.toLowerCase().includes("loisirs")
+                            ? require("../../assets/images/theater.png")
+                            : item.categoryName
+                                  .toLowerCase()
+                                  .includes("salaire")
+                              ? require("../../assets/images/payroll.png")
+                              : item.categoryName
+                                    .toLowerCase()
+                                    .includes("depart")
+                                ? require("../../assets/images/salary.png")
+                                : item.categoryName
+                                      .toLowerCase()
+                                      .includes("mission")
+                                  ? require("../../assets/images/mission.png")
+                                  : item.categoryName
+                                        .toLowerCase()
+                                        .includes("famille")
+                                    ? require("../../assets/images/big-family.png")
+                                    : item.categoryName
+                                          .toLowerCase()
+                                          .includes("education")
+                                      ? require("../../assets/images/stack-of-books.png")
+                                      : item.categoryName
+                                            .toLowerCase()
+                                            .includes("shopping")
+                                        ? require("../../assets/images/online-shopping.png")
+                                        : item.categoryName
+                                              .toLowerCase()
+                                              .includes("téléphone/internet")
+                                          ? require("../../assets/images/iphone.png")
+                                          : item.categoryName
+                                                .toLowerCase()
+                                                .includes("soin")
+                                            ? require("../../assets/images/lotions.png")
+                                            : require("../../assets/images/shapes.png")
+              }
+              style={{ width: 40, height: 40 }}
             />
           </View>
           <View style={{ width: "68%", gap: 4 }}>

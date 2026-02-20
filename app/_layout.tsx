@@ -93,6 +93,18 @@ export default function RootLayout() {
                 name="(screens)/DetailBudget"
                 options={{ headerShown: false, gestureEnabled: true }}
               />
+              <Stack.Screen
+                name="(screens)/DetailTransactions"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="(screens)/ListeTransactions"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="(screens)/IncomingEvent"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
             </Stack>
             <Toast />
             <StatusBar style="auto" />

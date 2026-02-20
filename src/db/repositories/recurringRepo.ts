@@ -172,7 +172,7 @@ export async function listPendingRecurringOccurrences(limit = 50) {
     amount: number;
   }>(
     `
-    SELECT q.id, q.recurring_id, q.due_date, q.status, r.name, r.amount
+    SELECT q.id, q.recurring_id, q.due_date, q.status, r.name, r.amount, CAST(julianday(date('now')) - julianday(q.due_date) AS INTEGER) as daysLate
     FROM recurring_due_queue q
     JOIN recurring_payments r ON r.id = q.recurring_id
     WHERE q.status='pending'

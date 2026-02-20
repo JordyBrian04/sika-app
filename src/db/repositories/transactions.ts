@@ -15,6 +15,7 @@ export type TransactionRow = {
   amount: number;
   type: TransactionType;
   category_id: number | null;
+  category_name: string | null;
   date: string;
   note: string | null;
   recurring_id: number | null;
@@ -78,7 +79,7 @@ export async function addTransaction(input: {
 
 export async function listTransactions(limit = 50): Promise<TransactionRow[]> {
   return all<TransactionRow>(
-    `SELECT * FROM transactions ORDER BY date DESC, id DESC LIMIT ?`,
+    `SELECT transactions.*, categories.name as category_name FROM transactions LEFT JOIN categories ON transactions.category_id = categories.id ORDER BY date DESC, id DESC LIMIT ?`,
     [limit],
   );
 }

@@ -10,12 +10,7 @@ import {
 } from "@/src/db/repositories/transactions";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { formatMoney } from "@/src/utils/format";
-import {
-  AntDesign,
-  Feather,
-  Ionicons,
-  MaterialIcons,
-} from "@expo/vector-icons";
+import { AntDesign, Feather, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
@@ -214,10 +209,63 @@ const DetailBudget = () => {
                   height: 60,
                 }}
               >
-                <MaterialIcons
-                  name="category"
-                  size={30}
-                  color={color === "#FFFFFF" ? COLORS.dark : COLORS.secondary}
+                <Image
+                  source={
+                    detail?.categoryName.toLowerCase().includes("alimentation")
+                      ? require("../../assets/images/diet.png")
+                      : detail?.categoryName.toLowerCase().includes("transport")
+                        ? require("../../assets/images/transportation.png")
+                        : detail?.categoryName.toLowerCase().includes("facture")
+                          ? require("../../assets/images/bill.png")
+                          : detail?.categoryName
+                                .toLowerCase()
+                                .includes("abonnement")
+                            ? require("../../assets/images/membership.png")
+                            : detail?.categoryName
+                                  .toLowerCase()
+                                  .includes("sante")
+                              ? require("../../assets/images/pills.png")
+                              : detail?.categoryName
+                                    .toLowerCase()
+                                    .includes("loisirs")
+                                ? require("../../assets/images/theater.png")
+                                : detail?.categoryName
+                                      .toLowerCase()
+                                      .includes("salaire")
+                                  ? require("../../assets/images/payroll.png")
+                                  : detail?.categoryName
+                                        .toLowerCase()
+                                        .includes("depart")
+                                    ? require("../../assets/images/salary.png")
+                                    : detail?.categoryName
+                                          .toLowerCase()
+                                          .includes("mission")
+                                      ? require("../../assets/images/mission.png")
+                                      : detail?.categoryName
+                                            .toLowerCase()
+                                            .includes("famille")
+                                        ? require("../../assets/images/big-family.png")
+                                        : detail?.categoryName
+                                              .toLowerCase()
+                                              .includes("education")
+                                          ? require("../../assets/images/stack-of-books.png")
+                                          : detail?.categoryName
+                                                .toLowerCase()
+                                                .includes("shopping")
+                                            ? require("../../assets/images/online-shopping.png")
+                                            : detail?.categoryName
+                                                  .toLowerCase()
+                                                  .includes(
+                                                    "téléphone/internet",
+                                                  )
+                                              ? require("../../assets/images/iphone.png")
+                                              : detail?.categoryName
+                                                    .toLowerCase()
+                                                    .includes("soin")
+                                                ? require("../../assets/images/lotions.png")
+                                                : require("../../assets/images/shapes.png")
+                  }
+                  style={{ width: 40, height: 40 }}
                 />
               </View>
               <View style={{ width: "75%", gap: 4 }}>
@@ -435,7 +483,7 @@ const DetailBudget = () => {
                     </Text>
 
                     {item.data.map((trans: any) => (
-                      <View
+                      <TouchableOpacity
                         key={trans.id}
                         style={{
                           flexDirection: "row",
@@ -449,6 +497,22 @@ const DetailBudget = () => {
                           borderRadius: 8,
                           marginBottom: 8,
                         }}
+                        onPress={
+                          () =>
+                            router.push({
+                              pathname: "/(screens)/DetailTransactions",
+                              params: {
+                                id: trans.id,
+                                amount: trans.amount,
+                                note: trans.note,
+                                date: trans.date,
+                                name: trans.name,
+                                type: trans.type,
+                                created_at: trans.created_at,
+                              },
+                            })
+                          // console.log("Transaction details on press:", trans)
+                        }
                       >
                         <View
                           style={{
@@ -514,7 +578,7 @@ const DetailBudget = () => {
                         >
                           {formatMoney(trans.amount)} CFA
                         </ThemedText>
-                      </View>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 )}
