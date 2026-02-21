@@ -9,6 +9,7 @@ import {
   getTransactionsByMonthYearAndCategory,
 } from "@/src/db/repositories/transactions";
 import { FONT_FAMILY } from "@/src/theme/fonts";
+import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { formatMoney } from "@/src/utils/format";
 import { AntDesign, Feather, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -43,6 +44,7 @@ const DetailBudget = () => {
   ); // Default to current month (YYYY-MM)
   const [barData, setBarData] = React.useState<any>([]);
   const [transactions, setTransactions] = React.useState<any[]>([]);
+  const { openModal, closeModal, isVisible } = useModalQueue();
 
   const fetchPeriod = async () => {
     const period = await getPeriode();

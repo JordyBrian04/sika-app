@@ -10,6 +10,8 @@ export type LevelInfo = {
   nextLevelStartXp: number;
   gender?: string;
   name?: string;
+  streak_days?: number;
+  last_activity_date?: string;
 };
 
 const LEVEL_THRESHOLDS = [0, 50, 120, 250, 450, 700, 1000, 1400, 1900, 2500];
@@ -63,14 +65,20 @@ function thresholdForLevel(level: number) {
 // }
 
 export async function addXp(xpToAdd: number): Promise<LevelInfo> {
-  const current = await getOne<{ xp: number; gender?: string; name?: string }>(
-    "SELECT * FROM user_profile WHERE id = 1",
-  );
+  const current = await getOne<{
+    xp: number;
+    gender?: string;
+    name?: string;
+    streak_days?: number;
+    last_activity_date?: string;
+  }>("SELECT * FROM user_profile WHERE id = 1");
 
   const xpTotal = (current?.xp ?? 0) + xpToAdd;
   const info = getLevelInfo(xpTotal, {
     gender: current?.gender,
     name: current?.name,
+    streak_days: current?.streak_days,
+    last_activity_date: current?.last_activity_date,
   });
 
   await runSql("UPDATE user_profile SET xp = ?, level = ? WHERE id = 1", [
@@ -83,7 +91,12 @@ export async function addXp(xpToAdd: number): Promise<LevelInfo> {
 
 export function getLevelInfo(
   xpTotal: number,
-  row?: { gender?: string; name?: string },
+  row?: {
+    gender?: string;
+    name?: string;
+    streak_days?: number;
+    last_activity_date?: string;
+  },
 ): LevelInfo {
   let level = 1;
   while (xpTotal >= thresholdForLevel(level + 1)) level++;
@@ -100,6 +113,8 @@ export function getLevelInfo(
     xpForNextLevel: nextLevelStartXp - levelStartXp,
     gender: row?.gender,
     name: row?.name,
+    streak_days: row?.streak_days,
+    last_activity_date: row?.last_activity_date,
   };
 }
 
@@ -109,9 +124,16 @@ export async function getProfile(): Promise<LevelInfo> {
     level: number;
     gender?: string;
     name?: string;
+    streak_days?: number;
+    last_activity_date?: string;
   }>("SELECT * FROM user_profile WHERE id = 1");
   const xpTotal = row?.xp ?? 0;
-  return getLevelInfo(xpTotal, { gender: row?.gender, name: row?.name });
+  return getLevelInfo(xpTotal, {
+    gender: row?.gender,
+    name: row?.name,
+    streak_days: row?.streak_days,
+    last_activity_date: row?.last_activity_date,
+  });
 }
 
 export type XpAction =

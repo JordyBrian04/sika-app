@@ -1,14 +1,14 @@
+import { FONT_FAMILY } from "@/src/theme/fonts";
 import { Feather, FontAwesome6 } from "@expo/vector-icons";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { PlatformPressable } from "@react-navigation/elements";
 import { useLinkBuilder, useTheme } from "@react-navigation/native";
-import { useFonts } from "expo-font";
 import React from "react";
 import { Platform, useColorScheme, View } from "react-native";
 import Animated, {
-    FadeIn,
-    FadeOut,
-    LinearTransition,
+  FadeIn,
+  FadeOut,
+  LinearTransition,
 } from "react-native-reanimated";
 
 const PRIMARY_COLOR = "#265ed7";
@@ -24,17 +24,6 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
   const { colors } = useTheme();
   const { buildHref } = useLinkBuilder();
   const colorScheme = useColorScheme();
-
-  const [fontLoaded] = useFonts({
-    Bold: require("../assets/fonts/Poppins-Bold.ttf"),
-    BoldItalic: require("../assets/fonts/Poppins-BoldItalic.ttf"),
-    SemiBold: require("../assets/fonts/Poppins-SemiBold.ttf"),
-    Regular: require("../assets/fonts/Poppins-Regular.ttf"),
-  });
-
-  if (!fontLoaded) {
-    return undefined;
-  }
 
   return (
     <View
@@ -129,7 +118,9 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
                 style={{
                   color: colorScheme === "dark" ? SECONDARY_COLOR : "#1a1a1a",
                   marginLeft: 8,
-                  fontFamily: isFocused ? "SemiBold" : "Regular",
+                  fontFamily: isFocused
+                    ? FONT_FAMILY.semibold
+                    : FONT_FAMILY.regular,
                 }}
               >
                 {label as string}

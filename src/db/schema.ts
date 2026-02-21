@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 6;
+export const DB_VERSION = 8;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -64,9 +64,14 @@ export const migrations: Record<number, string[]> = {
       name TEXT NOT NULL,
       target_amount INTEGER NOT NULL,
       target_date TEXT NOT NULL,
+      start_date TEXT,
+      priority TEXT DEFAULT 'medium', -- 'low' | 'medium' | 'high'
+      min_weekly INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
       current_amount INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`,
+    `CREATE INDEX IF NOT EXISTS idx_saving_goals_active ON saving_goals(active);`,
 
     // --- Badges
     `CREATE TABLE IF NOT EXISTS badges (
@@ -140,6 +145,82 @@ export const migrations: Record<number, string[]> = {
     );`,
     `CREATE INDEX IF NOT EXISTS idx_due_queue_status_date
       ON recurring_due_queue(status, due_date);`,
+
+    `CREATE TABLE IF NOT EXISTS goal_contributions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  amount INTEGER NOT NULL,               -- montant ajouté à l’objectif
+  date TEXT NOT NULL,                    -- 'YYYY-MM-DD'
+  note TEXT,
+  source TEXT NOT NULL DEFAULT 'manual', -- 'manual' | 'roundup' | 'auto'
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);`,
+    `CREATE INDEX IF NOT EXISTS idx_goal_contrib_goal_date
+ON goal_contributions(goal_id, date);`,
+
+    `CREATE TABLE IF NOT EXISTS goal_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      goal_id INTEGER NOT NULL,
+      rule_type TEXT NOT NULL, -- 'round_up', 'budget_surplus'...
+      value INTEGER NOT NULL,     -- ex: for 'round_up' => '5' (round up to nearest 5)
+
+    `,
+
+    `CREATE TABLE IF NOT EXISTS goal_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  rule_type TEXT NOT NULL,                 -- 'FUN_BUDGET_CAP'
+  value INTEGER NOT NULL,                  -- ex: plafond mensuel loisirs
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);`,
+
+    `CREATE TABLE IF NOT EXISTS goal_streaks (
+  goal_id INTEGER PRIMARY KEY,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0,
+  last_success_week TEXT,                  -- 'YYYY-WW' ex "2026-07"
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);`,
+
+    `CREATE TABLE IF NOT EXISTS weekly_missions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  week_key TEXT NOT NULL,                 -- ex: "2026-W07"
+  title TEXT NOT NULL,                    -- "Mission de la semaine"
+  description TEXT NOT NULL,
+  goal_amount INTEGER NOT NULL,           -- objectif CFA (mission principale)
+  progress_amount INTEGER NOT NULL DEFAULT 0,
+  reward_xp INTEGER NOT NULL DEFAULT 0,
+  reward_coins INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',  -- active | done | expired
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+
+    `CREATE INDEX IF NOT EXISTS idx_weekly_missions_week_key
+ ON weekly_missions(week_key);`,
+
+    `CREATE TABLE IF NOT EXISTS weekly_boosts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mission_id INTEGER NOT NULL,
+  code TEXT NOT NULL,                     -- "BOOST_EXTRA_SAVE" etc
+  title TEXT NOT NULL,                    -- "Boost: +2 000 FCFA"
+  description TEXT NOT NULL,
+  goal_amount INTEGER NOT NULL DEFAULT 0, -- si boost basé sur montant
+  progress_amount INTEGER NOT NULL DEFAULT 0,
+  reward_xp INTEGER NOT NULL DEFAULT 0,
+  reward_coins INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',  -- active | done | expired
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(mission_id) REFERENCES weekly_missions(id) ON DELETE CASCADE
+);`,
+
+    `CREATE INDEX IF NOT EXISTS idx_weekly_boosts_mission
+ ON weekly_boosts(mission_id);`,
+
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_boosts_unique
+ ON weekly_boosts(mission_id, code);`,
   ],
   2: [
     // Example migration for version 2
@@ -210,5 +291,75 @@ export const migrations: Record<number, string[]> = {
       );`,
     `CREATE INDEX IF NOT EXISTS idx_due_queue_status_date
       ON recurring_due_queue(status, due_date);`,
+  ],
+  7: [
+    `CREATE TABLE IF NOT EXISTS goal_contributions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  amount INTEGER NOT NULL,               -- montant ajouté à l’objectif
+  date TEXT NOT NULL,                    -- 'YYYY-MM-DD'
+  note TEXT,
+  source TEXT NOT NULL DEFAULT 'manual', -- 'manual' | 'roundup' | 'auto'
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);`,
+    `CREATE INDEX IF NOT EXISTS idx_goal_contrib_goal_date
+ON goal_contributions(goal_id, date);`,
+
+    `CREATE TABLE IF NOT EXISTS goal_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  rule_type TEXT NOT NULL,                 -- 'FUN_BUDGET_CAP'
+  value INTEGER NOT NULL,                  -- ex: plafond mensuel loisirs
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);`,
+
+    `CREATE TABLE IF NOT EXISTS goal_streaks (
+  goal_id INTEGER PRIMARY KEY,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0,
+  last_success_week TEXT,                  -- 'YYYY-WW' ex "2026-07"
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);`,
+  ],
+  8: [
+    `CREATE TABLE IF NOT EXISTS weekly_missions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  week_key TEXT NOT NULL,                 -- ex: "2026-W07"
+  title TEXT NOT NULL,                    -- "Mission de la semaine"
+  description TEXT NOT NULL,
+  goal_amount INTEGER NOT NULL,           -- objectif CFA (mission principale)
+  progress_amount INTEGER NOT NULL DEFAULT 0,
+  reward_xp INTEGER NOT NULL DEFAULT 0,
+  reward_coins INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',  -- active | done | expired
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+
+    `CREATE INDEX IF NOT EXISTS idx_weekly_missions_week_key
+ ON weekly_missions(week_key);`,
+
+    `CREATE TABLE IF NOT EXISTS weekly_boosts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mission_id INTEGER NOT NULL,
+  code TEXT NOT NULL,                     -- "BOOST_EXTRA_SAVE" etc
+  title TEXT NOT NULL,                    -- "Boost: +2 000 FCFA"
+  description TEXT NOT NULL,
+  goal_amount INTEGER NOT NULL DEFAULT 0, -- si boost basé sur montant
+  progress_amount INTEGER NOT NULL DEFAULT 0,
+  reward_xp INTEGER NOT NULL DEFAULT 0,
+  reward_coins INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',  -- active | done | expired
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(mission_id) REFERENCES weekly_missions(id) ON DELETE CASCADE
+);`,
+
+    `CREATE INDEX IF NOT EXISTS idx_weekly_boosts_mission
+ ON weekly_boosts(mission_id);`,
+
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_boosts_unique
+ ON weekly_boosts(mission_id, code);`,
   ],
 };

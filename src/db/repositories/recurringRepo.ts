@@ -151,10 +151,35 @@ export async function listUpcomingRecurring(limit = 50, daysAhead = 60) {
     interval_count: number;
   }>(
     `
-    SELECT id, name, amount, category_id, next_date, remind_days_before, frequency, interval_count
+    SELECT id, name, amount, category_id, next_date, remind_days_before, frequency, interval_count, active, CAST(julianday(next_date) - julianday(date('now')) AS INTEGER) as daysLate
     FROM recurring_payments
     WHERE active=1
       AND next_date <= date('now', ?)
+    ORDER BY next_date ASC
+    LIMIT ?
+    `,
+    [dateModifier, limit],
+  );
+}
+
+export async function listAllUpcomingRecurring(limit = 50, daysAhead = 60) {
+  const dateModifier = `+${daysAhead} days`;
+  // événements à venir "propres"
+  return all<{
+    id: number;
+    name: string;
+    amount: number;
+    category_id: number | null;
+    next_date: string;
+    remind_days_before: number;
+    frequency: string;
+    interval_count: number;
+    daysLate: number;
+  }>(
+    `
+    SELECT id, name, amount, category_id, next_date, remind_days_before, frequency, interval_count, active, CAST(julianday(next_date) - julianday(date('now')) AS INTEGER) as daysLate
+    FROM recurring_payments
+    WHERE next_date <= date('now', ?)
     ORDER BY next_date ASC
     LIMIT ?
     `,
@@ -170,6 +195,7 @@ export async function listPendingRecurringOccurrences(limit = 50) {
     status: string;
     name: string;
     amount: number;
+    daysLate: number;
   }>(
     `
     SELECT q.id, q.recurring_id, q.due_date, q.status, r.name, r.amount, CAST(julianday(date('now')) - julianday(q.due_date) AS INTEGER) as daysLate

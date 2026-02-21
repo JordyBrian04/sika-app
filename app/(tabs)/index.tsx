@@ -693,6 +693,26 @@ export default function HomeScreen() {
                         gap: 8,
                         width: 200,
                       }}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/(screens)/DetailEvent",
+                          params: {
+                            id: t.id,
+                            name: t.name,
+                            amount: t.amount.toString(),
+                            category_id: t.category_id,
+                            category_name:
+                              OldCategories.find((c) => c.id === t.category_id)
+                                ?.name || "Aucune",
+                            frequency: t.frequency,
+                            interval_count: t.interval_count.toString(),
+                            next_date: t.next_date,
+                            remind_days_before: t.remind_days_before,
+                            active: t.active,
+                            daysLate: t.daysLate,
+                          },
+                        })
+                      }
                     >
                       <Image
                         source={

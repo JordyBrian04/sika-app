@@ -105,6 +105,14 @@ export default function RootLayout() {
                 name="(screens)/IncomingEvent"
                 options={{ headerShown: false, gestureEnabled: true }}
               />
+              <Stack.Screen
+                name="(screens)/DetailEvent"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="(screens)/Categories"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
             </Stack>
             <Toast />
             <StatusBar style="auto" />
