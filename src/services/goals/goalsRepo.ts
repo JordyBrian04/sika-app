@@ -61,3 +61,11 @@ export async function listGoals(activeOnly = true): Promise<Goal[]> {
 export async function getGoal(id: number): Promise<Goal | null> {
   return getOne<Goal>(`SELECT * FROM saving_goals WHERE id=?`, [id]);
 }
+
+export async function getMinWeekly(): Promise<number> {
+  const res = await getOne<Goal>(
+    `SELECT AVG(min_weekly) as min_weekly FROM saving_goals WHERE active=1 ORDER BY id DESC LIMIT 1`,
+  );
+
+  return res?.min_weekly ? Math.ceil(res.min_weekly) : 0;
+}

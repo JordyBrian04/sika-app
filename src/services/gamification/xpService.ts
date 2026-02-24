@@ -144,7 +144,9 @@ export type XpAction =
   | "CREATE_GOAL"
   | "ADD_SAVING"
   | "MONTH_OK"
-  | "DAILY_MISSION";
+  | "DAILY_MISSION"
+  | "NO_SPEND_DAY"
+  | "WEEKLY_MISSION";
 
 const XP: Record<XpAction, { amount: number; label: string }> = {
   ADD_EXPENSE: { amount: 5, label: "Dépense ajoutée" },
@@ -155,6 +157,8 @@ const XP: Record<XpAction, { amount: number; label: string }> = {
   ADD_SAVING: { amount: 5, label: "Épargne ajoutée" },
   MONTH_OK: { amount: 60, label: "Budget respecté ce mois-ci" },
   DAILY_MISSION: { amount: 10, label: "Mission quotidienne complétée" },
+  NO_SPEND_DAY: { amount: 15, label: "Journée sans dépense complétée" },
+  WEEKLY_MISSION: { amount: 20, label: "Mission hebdomadaire complétée" },
 };
 
 export async function reward(action: XpAction, refId?: number) {

@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -361,5 +361,16 @@ ON goal_contributions(goal_id, date);`,
 
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_boosts_unique
  ON weekly_boosts(mission_id, code);`,
+  ],
+  9: [
+    `CREATE TABLE IF NOT EXISTS weekly_boost_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  boost_id INTEGER NOT NULL,
+  day TEXT NOT NULL, -- YYYY-MM-DD
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(boost_id, day),
+  FOREIGN KEY(boost_id) REFERENCES weekly_boosts(id) ON DELETE CASCADE
+);`,
+    `CREATE INDEX IF NOT EXISTS idx_weekly_boost_logs_day ON weekly_boost_logs(day);`,
   ],
 };

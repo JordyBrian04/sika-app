@@ -1,4 +1,5 @@
 import { all, getOne, runSql } from "@/src/db";
+import { reward } from "../gamification/xpService";
 
 export type WeeklyMission = {
   id: number;
@@ -240,6 +241,7 @@ async function progressBoostAmount(
       boost.id,
     ]);
     // rewards boost ici
-    // await addXP(boost.reward_xp); await addCoins(boost.reward_coins);
+    await reward("WEEKLY_MISSION", boost.reward_xp);
+    // await addCoins(boost.reward_coins);
   }
 }

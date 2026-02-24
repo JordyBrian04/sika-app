@@ -10,6 +10,12 @@ import "react-native-reanimated";
 
 import { UserInactivityProvider } from "@/context/UserInactivity";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import {
+  scheduleEndOfDayNotification,
+  setupEODCategory,
+} from "@/src/notifications/eod";
+import { registerEODNotificationListener } from "@/src/notifications/eodHandlers";
+import { getMinWeekly } from "@/src/services/goals/goalsRepo";
 import Toast from "@/src/ui/components/Toast";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -32,6 +38,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [ready, setReady] = useState(false);
   const fontsLoaded = useAppFonts();
+  let minWeekly = 0;
 
   useEffect(() => {
     migrate()
@@ -47,12 +54,22 @@ export default function RootLayout() {
       await setupRecurringNotificationCategory();
       await rescheduleAllActiveRecurring();
       await runRecurringCatchUp(toYYYYMMDD(new Date()));
+
+      await setupEODCategory();
+      await scheduleEndOfDayNotification(22, 0);
+
+      minWeekly = await getMinWeekly();
     })();
 
     const sub = registerRecurringNotificationResponseListener(() =>
       toYYYYMMDD(new Date()),
     );
-    return () => sub.remove();
+
+    const eodsub = registerEODNotificationListener(minWeekly);
+    return () => {
+      sub.remove();
+      eodsub.remove();
+    };
   }, []);
 
   if (!ready || !fontsLoaded) return null;
