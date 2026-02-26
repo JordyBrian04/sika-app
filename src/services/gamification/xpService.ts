@@ -12,6 +12,7 @@ export type LevelInfo = {
   name?: string;
   streak_days?: number;
   last_activity_date?: string;
+  active_days?: number;
 };
 
 const LEVEL_THRESHOLDS = [0, 50, 120, 250, 450, 700, 1000, 1400, 1900, 2500];
@@ -96,6 +97,7 @@ export function getLevelInfo(
     name?: string;
     streak_days?: number;
     last_activity_date?: string;
+    active_days?: number;
   },
 ): LevelInfo {
   let level = 1;
@@ -115,6 +117,7 @@ export function getLevelInfo(
     name: row?.name,
     streak_days: row?.streak_days,
     last_activity_date: row?.last_activity_date,
+    active_days: row?.active_days,
   };
 }
 
@@ -126,6 +129,7 @@ export async function getProfile(): Promise<LevelInfo> {
     name?: string;
     streak_days?: number;
     last_activity_date?: string;
+    active_days?: number;
   }>("SELECT * FROM user_profile WHERE id = 1");
   const xpTotal = row?.xp ?? 0;
   return getLevelInfo(xpTotal, {
@@ -133,6 +137,7 @@ export async function getProfile(): Promise<LevelInfo> {
     name: row?.name,
     streak_days: row?.streak_days,
     last_activity_date: row?.last_activity_date,
+    active_days: row?.active_days,
   });
 }
 

@@ -1,6 +1,8 @@
 import { all, getOne, runSql } from "@/src/db/";
 import { updateGoalStreakForWeek } from "@/src/services/goals/streak";
 import { toYYYYMMDD, weekKey } from "@/src/utils/goalDates";
+import { updateActivityAndStreak } from "../gamification/daily";
+import { reward } from "../gamification/xpService";
 import { onSaving } from "../missions/weekly";
 
 export type GoalContribution = {
@@ -34,12 +36,14 @@ export async function addContribution(input: {
   );
 
   const res = await getOne<{ min_weekly: number }>(
-    `SELECT min_weekly as min_weekly FROM saving_goals WHERE goal_id=? AND active=1 ORDER BY id DESC LIMIT 1`,
+    `SELECT min_weekly as min_weekly FROM saving_goals WHERE id=? AND active=1 ORDER BY id DESC LIMIT 1`,
     [input.goal_id],
   );
 
   // update streak (si cette semaine on a ajouté >= min_weekly)
+  await reward("ADD_SAVING", input.goal_id);
   await updateGoalStreakForWeek(input.goal_id, weekKey(new Date(date)));
+  await updateActivityAndStreak();
   await onSaving(input.amount, res?.min_weekly ?? 0); // assuming 1000 is the default minWeekly value
 }
 

@@ -14,6 +14,7 @@ import {
   AntDesign,
   Entypo,
   FontAwesome5,
+  Foundation,
   MaterialIcons,
 } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -220,13 +221,7 @@ export default function TabFiveScreen() {
               <AntDesign name="calendar" size={24} color={COLORS.primary} />
             </View>
             <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 16 }}>
-              {(user?.last_activity_date &&
-                Math.floor(
-                  (new Date().getTime() -
-                    new Date(user.last_activity_date).getTime()) /
-                    (1000 * 60 * 60 * 24),
-                )) ||
-                0}
+              {user?.active_days || 0}
             </ThemedText>
             <ThemedText
               style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray }}
@@ -321,6 +316,45 @@ export default function TabFiveScreen() {
                 style={{ fontFamily: FONT_FAMILY.medium, fontSize: 16 }}
               >
                 Liste des catégories
+              </ThemedText>
+            </View>
+            <Entypo name="chevron-small-right" size={24} color={COLORS.gray} />
+          </TouchableOpacity>
+
+          <View
+            style={{
+              height: 1,
+              backgroundColor: COLORS.gray + "30",
+              // marginVertical: 10,
+            }}
+          />
+
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+            onPress={() => router.push("/(screens)/Categories")}
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            >
+              <Foundation
+                name="database"
+                size={28}
+                color={color === "#FFFFFF" ? COLORS.white : COLORS.dark}
+              />
+              <ThemedText
+                style={{
+                  fontFamily: FONT_FAMILY.medium,
+                  fontSize: 16,
+                  flexWrap: "wrap",
+                  // flex: 1,
+                  width: "80%",
+                }}
+              >
+                Sauvegarde et restauration des données
               </ThemedText>
             </View>
             <Entypo name="chevron-small-right" size={24} color={COLORS.gray} />

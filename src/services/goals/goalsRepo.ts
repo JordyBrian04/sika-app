@@ -1,5 +1,6 @@
 import { all, getOne, runSql } from "@/src/db";
 import { toYYYYMMDD } from "@/src/utils/goalDates";
+import { reward } from "../gamification/xpService";
 
 export type Goal = {
   id: number;
@@ -10,6 +11,7 @@ export type Goal = {
   priority: "low" | "medium" | "high";
   min_weekly: number;
   active: 0 | 1;
+  frequence?: "daily" | "weekly" | "monthly"; // pour calcul auto des contributions
 };
 
 export async function createGoal(input: {
@@ -19,11 +21,12 @@ export async function createGoal(input: {
   priority?: Goal["priority"];
   min_weekly?: number;
   start_date?: string;
+  frequence?: Goal["frequence"];
 }) {
   const start = input.start_date ?? toYYYYMMDD(new Date());
   await runSql(
-    `INSERT INTO saving_goals (name, target_amount, start_date, target_date, priority, min_weekly)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO saving_goals (name, target_amount, start_date, target_date, priority, min_weekly, frequence)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       input.name.trim(),
       input.target_amount,
@@ -31,8 +34,18 @@ export async function createGoal(input: {
       input.target_date,
       input.priority ?? "medium",
       input.min_weekly ?? 0,
+      input.frequence ?? "weekly",
     ],
   );
+
+  const res = await getOne<{ id: number }>(
+    `SELECT id FROM saving_goals WHERE name=? AND target_amount=? AND start_date=? AND target_date=? ORDER BY id DESC LIMIT 1`,
+    [input.name.trim(), input.target_amount, start, input.target_date],
+  );
+
+  await reward("CREATE_GOAL", res?.id);
+
+  return res ? res.id : 0;
 }
 
 export async function updateGoal(id: number, patch: Partial<Omit<Goal, "id">>) {
@@ -68,4 +81,21 @@ export async function getMinWeekly(): Promise<number> {
   );
 
   return res?.min_weekly ? Math.ceil(res.min_weekly) : 0;
+}
+
+export async function weeklyHistory(
+  goalId: number,
+): Promise<{ weekStart: string; amount: number }[]> {
+  return all<{ weekStart: string; amount: number }>(
+    `SELECT 
+      sg.name,
+      CAST(((julianday(gc.date) - julianday(sg.start_date)) / 7) AS INTEGER) + 1 AS week_num,
+      SUM(gc.amount) AS weekly_sum
+    FROM goal_contributions gc
+    JOIN saving_goals sg ON gc.goal_id = sg.id
+    WHERE gc.goal_id = ?
+    GROUP BY sg.id, week_num
+    ORDER BY week_num DESC`,
+    [goalId],
+  );
 }

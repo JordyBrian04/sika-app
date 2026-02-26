@@ -1,3 +1,4 @@
+import { diffDays } from "@/src/utils/goalDates";
 import { getOne, runSql } from "../../db";
 import { getLevelInfo, reward, XpAction } from "./xpService";
 // import { getLevelInfo } from "./leveling";
@@ -21,6 +22,13 @@ type MissionRow = {
   progress: number;
   reward_xp: number;
   completed_at: string | null;
+};
+
+type StatsRow = {
+  streak_days: number;
+  active_days: number;
+  last_activity_date: string | null;
+  last_checked_date: string | null;
 };
 
 // ---------- Utils dates ----------
@@ -198,4 +206,95 @@ export async function updateDailyMissions(
   if (action === "ADD_SAVING") {
     await progressMission(todayYYYYMMDD, "ADD_1_SAVING", 1);
   }
+}
+
+async function hasAnyTransactionOnDate(day: string): Promise<boolean> {
+  const row = await getOne<{ count: number }>(
+    `SELECT COUNT(*) as count FROM transactions WHERE date = ?`,
+    [day],
+  );
+  return (row?.count ?? 0) > 0;
+}
+
+export async function updateActivityAndStreak(todayISO?: string) {
+  const today = todayISO ?? formatDateYYYYMMDD(new Date());
+
+  const stats = await getOne<StatsRow>(
+    `SELECT streak_days, active_days, last_activity_date, last_checked_date FROM user_profile WHERE id = 1`,
+  );
+  const streak_days = stats?.streak_days ?? 0;
+  const active_days = stats?.active_days ?? 0;
+  const last_active = stats?.last_activity_date ?? null;
+  const last_checked = stats?.last_checked_date ?? null;
+
+  if (last_checked === today) {
+    // déjà checké aujourd’hui => stop
+    return {
+      streak_days: 0,
+      active_days: 0,
+      last_active_date: null,
+      last_checked_date: today,
+    };
+  }
+
+  const didTxToday = await hasAnyTransactionOnDate(today);
+
+  if (!didTxToday) {
+    if (last_active) {
+      const daysSinceLastActive = diffDays(
+        new Date(today),
+        new Date(last_active),
+      );
+      if (daysSinceLastActive >= 1) {
+        // Perte du streak
+        await runSql(
+          `UPDATE user_profile SET streak_days = 0, last_checked_date = ? WHERE id = 1`,
+          [today],
+        );
+      } else {
+        await runSql(
+          `UPDATE user_profile SET last_checked_date = ? WHERE id = 1`,
+          [today],
+        );
+      }
+    } else {
+      await runSql(
+        `UPDATE user_profile SET last_checked_date = ? WHERE id = 1`,
+        [today],
+      );
+    }
+
+    return getOne<StatsRow>(
+      `SELECT streak_days, active_days, last_activity_date, last_checked_date FROM user_profile WHERE id = 1`,
+    );
+  }
+
+  let nextStreak = 1;
+  let nextActiveDays = active_days;
+
+  if (last_active !== today) {
+    nextActiveDays = active_days + 1;
+  }
+
+  if (!last_active) {
+    nextStreak = 1;
+  } else {
+    const daysDiff = diffDays(new Date(today), new Date(last_active));
+    if (daysDiff === 1) {
+      nextStreak = streak_days + 1;
+    } else if (daysDiff > 1) {
+      nextStreak = 1; // Perte du streak
+    } else {
+      nextStreak = streak_days; // même jour, pas de changement de streak
+    }
+  }
+
+  await runSql(
+    `UPDATE user_profile SET streak_days = ?, active_days = ?, last_activity_date = ?, last_checked_date = ? WHERE id = 1`,
+    [nextStreak, nextActiveDays, today, today],
+  );
+
+  return getOne<StatsRow>(
+    `SELECT streak_days, active_days, last_activity_date, last_checked_date FROM user_profile WHERE id = 1`,
+  );
 }

@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 9;
+export const DB_VERSION = 11;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -65,6 +65,7 @@ export const migrations: Record<number, string[]> = {
       target_amount INTEGER NOT NULL,
       target_date TEXT NOT NULL,
       start_date TEXT,
+      frequence TEXT, -- 'daily', 'weekly', 'monthly' (pour calcul auto des contributions)
       priority TEXT DEFAULT 'medium', -- 'low' | 'medium' | 'high'
       min_weekly INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
@@ -98,6 +99,8 @@ export const migrations: Record<number, string[]> = {
       gender TEXT DEFAULT null,
       streak_days INTEGER NOT null DEFAULT 0,
       last_activity_date TEXT,
+      last_checked_date TEXT,
+      active_days TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`,
 
@@ -194,6 +197,8 @@ ON goal_contributions(goal_id, date);`,
   progress_amount INTEGER NOT NULL DEFAULT 0,
   reward_xp INTEGER NOT NULL DEFAULT 0,
   reward_coins INTEGER NOT NULL DEFAULT 0,
+  ai_reason TEXT,
+  ai_profile TEXT,
   status TEXT NOT NULL DEFAULT 'active',  -- active | done | expired
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`,
@@ -373,4 +378,20 @@ ON goal_contributions(goal_id, date);`,
 );`,
     `CREATE INDEX IF NOT EXISTS idx_weekly_boost_logs_day ON weekly_boost_logs(day);`,
   ],
+  10: [
+    `ALTER TABLE user_profile ADD COLUMN last_checked_date TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN active_days TEXT;`,
+    `ALTER TABLE weekly_missions ADD COLUMN ai_profile TEXT;`,
+    `ALTER TABLE weekly_missions ADD COLUMN ai_reason TEXT;`,
+
+    `CREATE TABLE IF NOT EXISTS ai_action_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  day TEXT NOT NULL,              -- YYYY-MM-DD
+  action TEXT NOT NULL,           -- ADD_EXPENSE, ADD_INCOME, ADD_SAVING, etc
+  amount INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_action_log_day ON ai_action_log(day);`,
+  ],
+  11: [`ALTER TABLE saving_goals ADD COLUMN frequence TEXT;`],
 };

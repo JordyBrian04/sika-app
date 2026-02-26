@@ -2,14 +2,13 @@ import { FONT_FAMILY } from "@/src/theme/fonts";
 import { color } from "@/src/utils/colos";
 import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import { Text, View } from "react-native";
-import { SharedValue, useDerivedValue } from "react-native-reanimated";
 import { COLORS } from "./ui/color";
 
 type Props = {
   radius: number;
   strokeWidth: number;
-  percentage: SharedValue<number>;
-  end: SharedValue<number>;
+  percentage: number;
+  end: number;
 };
 
 const CircularProgressBar = ({
@@ -22,10 +21,14 @@ const CircularProgressBar = ({
   const path = Skia.Path.Make();
   path.addCircle(radius, radius, innerRadius);
 
-  const targetText = useDerivedValue(
-    () => `${Math.round(percentage.value)}%`,
-    [],
-  );
+  // console.log(
+  //   "Rendering CircularProgressBar with percentage:",
+  //   percentage,
+  //   "and end:",
+  //   end,
+  // );
+
+  const targetText = `${Math.round(percentage)}%`;
 
   return (
     <View
@@ -59,11 +62,21 @@ const CircularProgressBar = ({
           end={end}
         />
       </Canvas>
-      <View style={{ position: "absolute", top: 30, left: 30 }}>
+      <View
+        style={{
+          position: "absolute",
+          top: radius === 70 ? 50 : 30,
+          left: radius === 70 ? 40 : 30,
+        }}
+      >
         <Text
-          style={{ color: color, fontSize: 20, fontFamily: FONT_FAMILY.bold }}
+          style={{
+            color: color,
+            fontSize: radius === 70 ? 28 : 20,
+            fontFamily: FONT_FAMILY.bold,
+          }}
         >
-          {Math.round(percentage.value)}%
+          {Math.round(percentage)}%
         </Text>
       </View>
     </View>

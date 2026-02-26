@@ -10,11 +10,13 @@ import "react-native-reanimated";
 
 import { UserInactivityProvider } from "@/context/UserInactivity";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ensureAndroidChannels } from "@/src/notifications/channels";
 import {
   scheduleEndOfDayNotification,
   setupEODCategory,
 } from "@/src/notifications/eod";
 import { registerEODNotificationListener } from "@/src/notifications/eodHandlers";
+import { updateActivityAndStreak } from "@/src/services/gamification/daily";
 import { getMinWeekly } from "@/src/services/goals/goalsRepo";
 import Toast from "@/src/ui/components/Toast";
 import { useEffect, useState } from "react";
@@ -55,8 +57,11 @@ export default function RootLayout() {
       await rescheduleAllActiveRecurring();
       await runRecurringCatchUp(toYYYYMMDD(new Date()));
 
+      await ensureAndroidChannels();
       await setupEODCategory();
       await scheduleEndOfDayNotification(22, 0);
+
+      await updateActivityAndStreak();
 
       minWeekly = await getMinWeekly();
     })();
@@ -128,6 +133,10 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="(screens)/Categories"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="(screens)/DetailGoal"
                 options={{ headerShown: false, gestureEnabled: true }}
               />
             </Stack>
