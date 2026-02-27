@@ -7,6 +7,7 @@ import {
   ExpenseVsIncomePerPeriod,
   getTransactionsByPeriodAndCategory,
 } from "@/src/db/repositories/statsRepo";
+import { getFinanceScore } from "@/src/services/stats/financeScore";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { color } from "@/src/utils/colos";
 import { formatMoney } from "@/src/utils/format";
@@ -233,7 +234,7 @@ export default function TabThreeScreen() {
     );
     setPieData(datasPie);
 
-    console.log("getTransactionsByPeriodAndCategory", datasPie);
+    console.log("financeScore", await getFinanceScore({ days: 60 }));
     setLoading(false);
   };
 
