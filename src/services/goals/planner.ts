@@ -61,12 +61,12 @@ export async function getGoalPlan(
 
   const daysElapsed = Math.max(diffDays(today, parseISO(goal.start_date)), 1);
   const weeklyElapsed = Math.max(Math.ceil(daysElapsed / 7), 1);
-  console.log("daysElapsed ", daysElapsed);
-  console.log("weeklyElapsed ", weeklyElapsed);
+  // console.log("daysElapsed ", daysElapsed);
+  // console.log("weeklyElapsed ", weeklyElapsed);
   const dailyRate = saved / daysElapsed; // Combien il épargne par jour en moyenne
   const weeklyRate = saved / weeklyElapsed; // Combien il épargne par semaine en moyenne
-  console.log("dailyRate", dailyRate);
-  console.log("weeklyRate", weeklyRate);
+  // console.log("dailyRate", dailyRate);
+  // console.log("weeklyRate", weeklyRate);
 
   let projectedDate: string | undefined;
 

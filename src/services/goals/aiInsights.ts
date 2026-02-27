@@ -1,5 +1,12 @@
 import { all, getOne } from "@/src/db";
-import { toYYYYMMDD } from "@/src/utils/date";
+import {
+  getBudgetVsSpendForMonth,
+  getCategoriesMap,
+  getTxInRange,
+  listTransactions,
+} from "@/src/db/repositories/transactions";
+import { addDays, toYYYYMMDD } from "@/src/utils/date";
+import { diffDays } from "@/src/utils/goalDates";
 
 type InsightCard = {
   observation: string;
@@ -248,6 +255,288 @@ export async function getAIInsights(
       thisWeekSpend: wow.thisWeekSpend,
       prevWeekSpend: wow.prevWeekSpend,
       avgDailyThisWeek: avgDaily,
+    },
+  };
+}
+
+export type AIInsight = {
+  key: string;
+  title: string;
+  observation: string;
+  recommendation: string;
+  confidence: number; // 0..100
+  impact: number; // 0..100 (à toi d'ajuster)
+  meta?: Record<string, any>;
+};
+
+function confidenceFromData(params: {
+  txCount: number;
+  daySpan: number;
+  hasBudget?: boolean;
+}) {
+  const { txCount, daySpan, hasBudget } = params;
+
+  // Base sur quantité de données
+  const cTx = clamp((txCount / 25) * 60, 0, 60); // 0..60
+  const cDays = clamp((daySpan / 30) * 30, 0, 30); // 0..30
+  const cBudget = hasBudget ? 10 : 0; // 0..10
+
+  return Math.round(clamp(cTx + cDays + cBudget, 0, 100));
+}
+
+export function dayOfWeek(dateStr: string) {
+  // 0=dimanche..6=samedi
+  return new Date(dateStr + "T00:00:00").getDay();
+}
+
+function getDaySpanFromTransactions(transactions: { date: string }[]) {
+  if (!transactions.length) return 0;
+
+  const dates = transactions.map((t) =>
+    new Date(t.date + "T00:00:00").getTime(),
+  );
+
+  const minDate = Math.min(...dates);
+  const maxDate = Math.max(...dates);
+
+  const diffMs = maxDate - minDate;
+
+  return Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+export async function getAIInsightsTop3(input?: {
+  today?: string; // YYYY-MM-DD
+  lookbackDays?: number; // ex: 60
+  focusCategoryId?: number | null; // ex: loisirs
+  monthlyBudgetTotal?: number | null; // si tu as un budget global
+}): Promise<AIInsight[]> {
+  const today = input?.today ?? toYYYYMMDD(new Date());
+  const lookbackDays = input?.lookbackDays ?? 60;
+  const from = addDays(new Date(today), -lookbackDays);
+
+  const [tx, catsMap] = await Promise.all([
+    getTxInRange(toYYYYMMDD(from), today),
+    getCategoriesMap(),
+  ]);
+
+  const daySpan = diffDays(from, new Date(today)) + 1;
+  const txCount = tx.length;
+
+  // Si pas assez de data => on sort quand même 1-2 insights mais confiance faible
+  const expenses = tx.filter((t) => t.type === "depense");
+  const incomes = tx.filter((t) => t.type === "entree");
+  const totalExpense = expenses.reduce((s, t) => s + t.amount, 0);
+  const totalIncome = incomes.reduce((s, t) => s + t.amount, 0);
+
+  // ===== Insight A: “Week-end tu dépenses +X%” =====
+  const weekendExpense = expenses
+    .filter((t) => {
+      const d = dayOfWeek(t.date);
+      return d === 0 || d === 6;
+    })
+    .reduce((s, t) => s + t.amount, 0);
+
+  const weekdayExpense = totalExpense - weekendExpense;
+
+  // approx jours week-end vs semaine sur la période
+  const weeks = Math.max(1, Math.floor(daySpan / 7));
+  const weekendDays = Math.min(
+    daySpan,
+    weeks * 2 + (daySpan % 7 >= 6 ? 2 : daySpan % 7 >= 1 ? 1 : 0),
+  );
+  const weekdayDays = Math.max(1, daySpan - weekendDays);
+
+  const avgWeekend = weekendExpense / Math.max(1, weekendDays);
+  const avgWeekday = weekdayExpense / Math.max(1, weekdayDays);
+  const deltaPct =
+    avgWeekday === 0 ? 0 : ((avgWeekend - avgWeekday) / avgWeekday) * 100;
+
+  const insightWeekend: AIInsight = {
+    key: "WEEKEND_SPEND",
+    title: "Dépenses week-end",
+    observation:
+      txCount < 10
+        ? "Pas assez de données pour conclure sur tes habitudes week-end."
+        : `Tu dépenses surtout le week-end (≈ ${deltaPct >= 0 ? "+" : ""}${Math.round(deltaPct)}% vs jours de semaine).`,
+    recommendation:
+      txCount < 10
+        ? "Ajoute encore quelques transactions cette semaine pour que l’analyse devienne fiable."
+        : "Fixe une enveloppe week-end (ex: 5 000–10 000 FCFA) et active une alerte quand tu atteins 70%.",
+    confidence: confidenceFromData({
+      txCount,
+      daySpan,
+      hasBudget: !!input?.monthlyBudgetTotal,
+    }),
+    impact: clamp(Math.round(Math.abs(deltaPct)), 10, 90),
+    meta: { deltaPct: Math.round(deltaPct), avgWeekend, avgWeekday },
+  };
+
+  // ===== Insight B: “Top catégorie qui te coûte le plus” =====
+  const byCat = new Map<number, number>();
+  for (const e of expenses) {
+    if (!e.category_id) continue;
+    byCat.set(e.category_id, (byCat.get(e.category_id) ?? 0) + e.amount);
+  }
+  const topCat = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0];
+  const topCatName = topCat
+    ? (catsMap.get(topCat[0])?.name ?? "Catégorie")
+    : "Aucune";
+  const topCatSpend = topCat ? topCat[1] : 0;
+
+  const sharePct = totalExpense === 0 ? 0 : (topCatSpend / totalExpense) * 100;
+
+  const insightTopCat: AIInsight = {
+    key: "TOP_CATEGORY",
+    title: "Catégorie principale",
+    observation: topCat
+      ? `Ta catégorie #1 est **${topCatName}** : ${Math.round(sharePct)}% de tes dépenses sur ${lookbackDays} jours.`
+      : "Je n’ai pas assez de dépenses catégorisées pour identifier ta catégorie #1.",
+    recommendation: topCat
+      ? `Réduis **${topCatName}** de 10% la semaine prochaine (petit défi) : ça libère du budget sans te frustrer.`
+      : "Commence par choisir une catégorie pour chaque dépense (même simple).",
+    confidence: confidenceFromData({ txCount, daySpan, hasBudget: false }),
+    impact: clamp(Math.round(sharePct), 15, 95),
+    meta: { topCatId: topCat?.[0] ?? null, topCatName, topCatSpend, sharePct },
+  };
+
+  // ===== Insight C: “Chaque dépense retarde ton MacBook de X jours” (si objectif) =====
+  // Ici on fait un calcul “simple” : retard = dépense / vitesse d’épargne
+  // vitesse d’épargne = moyenne (épargne nette/jour) estimée : (revenus - dépenses)/daySpan
+  const netPerDay = (totalIncome - totalExpense) / Math.max(1, daySpan);
+  const savingSpeed = Math.max(0, netPerDay); // si négatif => 0
+
+  // Focus category (ex: loisirs)
+  const focusCatId = input?.focusCategoryId ?? null;
+  const focusSpend = focusCatId
+    ? expenses
+        .filter((t) => t.category_id === focusCatId)
+        .reduce((s, t) => s + t.amount, 0)
+    : 0;
+
+  const delayDays =
+    savingSpeed <= 0 ? null : Math.round(focusSpend / savingSpeed);
+
+  const insightDelay: AIInsight = {
+    key: "GOAL_DELAY",
+    title: "Impact sur tes objectifs",
+    observation: !focusCatId
+      ? "Tu peux choisir une catégorie “à risque” (ex: Loisirs) pour mesurer son impact sur ton objectif."
+      : savingSpeed <= 0
+        ? `Sur ${lookbackDays} jours, ton épargne nette est faible (ou négative). Du coup tes dépenses te font perdre de l’avance.`
+        : `Sur ${lookbackDays} jours, tes dépenses **${catsMap.get(focusCatId)?.name ?? "focus"}** peuvent retarder ton objectif d’environ **${delayDays} jours**.`,
+    recommendation: !focusCatId
+      ? "Choisis ta catégorie principale de “tentation” (Loisirs, Livraison, Abos) et je te calcule l’impact exact."
+      : savingSpeed <= 0
+        ? "Objectif mini : repasser en épargne nette positive (même +500 FCFA/jour). Commence par couper 1 dépense non essentielle."
+        : `Défi : baisse cette catégorie de 15% pendant 2 semaines → tu récupères plusieurs jours d’avance.`,
+    confidence: confidenceFromData({ txCount, daySpan, hasBudget: false }),
+    impact: clamp(delayDays ?? 10, 10, 90),
+    meta: { savingSpeed, focusSpend, delayDays, focusCatId },
+  };
+
+  const transactions = await listTransactions(200);
+  const daysSpan = getDaySpanFromTransactions(transactions);
+
+  const budgetInsight = await buildBudgetInsight({
+    today: toYYYYMMDD(new Date()),
+    txCount: transactions.length,
+    daySpan: daysSpan,
+  });
+
+  // ===== Règle: on filtre les insights trop “vides” et on sort Top 3 =====
+  const candidates = [
+    insightWeekend,
+    insightTopCat,
+    insightDelay,
+    ...(budgetInsight ? [budgetInsight] : []),
+  ];
+
+  // Score global = confiance * 0.6 + impact * 0.4
+  const scored = candidates
+    .map((x) => ({
+      ...x,
+      _score: x.confidence * 0.6 + x.impact * 0.4,
+    }))
+    .sort((a, b) => b._score - a._score);
+
+  return scored.slice(0, 3).map(({ _score, ...rest }) => rest);
+}
+
+export async function buildBudgetInsight(params: {
+  today?: string; // YYYY-MM-DD
+  txCount: number;
+  daySpan: number;
+}): Promise<AIInsight | null> {
+  const today = params.today ?? toYYYYMMDD(new Date());
+  const d = new Date(today + "T00:00:00");
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+
+  const rows = await getBudgetVsSpendForMonth(month, year);
+  if (!rows || rows.length === 0) {
+    return {
+      key: "BUDGETS_EMPTY",
+      title: "Budgets mensuels",
+      observation: "Aucun budget n’est défini pour ce mois.",
+      recommendation:
+        "Crée au moins 1 budget (ex: Alimentation / Transport) pour activer les alertes et les recommandations.",
+      confidence: confidenceFromData({
+        txCount: params.txCount,
+        daySpan: params.daySpan,
+        hasBudget: false,
+      }),
+      impact: 35,
+      meta: { month, year },
+    };
+  }
+
+  const over = rows.filter((r) => r.ratio >= 1);
+  const near = rows.filter((r) => r.ratio >= 0.8 && r.ratio < 1);
+
+  // Priorité : dépassements, sinon proches
+  const main = over[0] ?? near[0] ?? rows[0];
+
+  const overNames = over.slice(0, 3).map((r) => r.category_name);
+  const nearNames = near.slice(0, 3).map((r) => r.category_name);
+
+  const observation =
+    over.length > 0
+      ? `Tu as dépassé ton budget sur **${over.length}** catégorie(s) : ${overNames.join(", ")}.`
+      : near.length > 0
+        ? `Attention : tu es proche du dépassement sur **${near.length}** catégorie(s) : ${nearNames.join(", ")}.`
+        : `Bonne nouvelle : tu es dans les limites sur toutes tes catégories budgétées.`;
+
+  const mainPct = Math.round(main.ratio * 100);
+  const rec =
+    over.length > 0
+      ? `Stop “dégâts” : bloque les dépenses sur **${main.category_name}** 48h, et ajuste un plafond “reste du mois” (ex: ${Math.max(0, main.remaining)} FCFA).`
+      : near.length > 0
+        ? `Mode contrôle : limite **${main.category_name}** à ${Math.max(0, main.remaining)} FCFA jusqu’à la fin du mois (≈ ${mainPct}% déjà consommé).`
+        : `Continue comme ça. Si tu veux booster l’épargne, réduis la catégorie #1 de 5–10%.`;
+
+  const impact = clamp(
+    over.length > 0 ? 85 : near.length > 0 ? 65 : 35,
+    10,
+    95,
+  );
+
+  return {
+    key: "BUDGET_STATUS",
+    title: "Budgets du mois",
+    observation,
+    recommendation: rec,
+    confidence: confidenceFromData({
+      txCount: params.txCount,
+      daySpan: params.daySpan,
+      hasBudget: true,
+    }),
+    impact,
+    meta: {
+      month,
+      year,
+      overCount: over.length,
+      nearCount: near.length,
+      top: rows.slice(0, 5),
     },
   };
 }

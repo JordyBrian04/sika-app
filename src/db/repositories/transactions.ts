@@ -22,6 +22,16 @@ export type TransactionRow = {
   created_at: string;
 };
 
+type TxRow = {
+  id: number;
+  amount: number;
+  type: "depense" | "entree";
+  date: string; // YYYY-MM-DD
+  category_id: number | null;
+};
+
+type CatRow = { id: number; name: string; type: string };
+
 export async function addTransaction(input: {
   amount: number;
   type: TransactionType;
@@ -168,4 +178,64 @@ export async function getLastSixMonthsSpendingByCategory(
     });
   }
   return barData;
+}
+
+export async function getTxInRange(from: string, to: string) {
+  return all<TxRow>(
+    `
+    SELECT id, amount, type, date, category_id
+    FROM transactions
+    WHERE date >= ? AND date <= ?
+    ORDER BY date ASC
+    `,
+    [from, to],
+  );
+}
+
+export async function getCategoriesMap() {
+  const cats = await all<CatRow>(`SELECT id, name, type FROM categories`);
+  const map = new Map<number, CatRow>();
+  cats.forEach((c) => map.set(c.id, c));
+  return map;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+type BudgetVsSpendRow = {
+  category_id: number;
+  category_name: string;
+  limit_amount: number;
+  spent: number; // dépenses du mois
+  remaining: number; // limit - spent
+  ratio: number; // spent / limit (0..+)
+};
+
+export async function getBudgetVsSpendForMonth(month: number, year: number) {
+  return all<BudgetVsSpendRow>(
+    `
+    SELECT
+      b.category_id,
+      c.name as category_name,
+      b.limit_amount as limit_amount,
+      COALESCE(SUM(t.amount), 0) as spent,
+      (b.limit_amount - COALESCE(SUM(t.amount), 0)) as remaining,
+      CASE
+        WHEN b.limit_amount <= 0 THEN 0
+        ELSE (COALESCE(SUM(t.amount), 0) * 1.0 / b.limit_amount)
+      END as ratio
+    FROM budgets b
+    JOIN categories c ON c.id = b.category_id
+    LEFT JOIN transactions t
+      ON t.category_id = b.category_id
+     AND t.type = 'depense'
+     AND CAST(strftime('%m', t.date) AS INTEGER) = b.month
+     AND CAST(strftime('%Y', t.date) AS INTEGER) = b.year
+    WHERE b.month = ? AND b.year = ?
+    GROUP BY b.category_id, c.name, b.limit_amount
+    ORDER BY ratio DESC, spent DESC
+    `,
+    [month, year],
+  );
 }

@@ -54,6 +54,10 @@ export async function listContributions(goal_id: number, limit = 50) {
   );
 }
 
+export async function deleteGoalContribution(id: number) {
+  await runSql(`DELETE FROM goal_contributions WHERE goal_id=?`, [id]);
+}
+
 export async function getGoalSavedAmount(goal_id: number) {
   const row = await getOne<{ total: number }>(
     `SELECT COALESCE(SUM(amount), 0) as total FROM goal_contributions WHERE goal_id=?`,

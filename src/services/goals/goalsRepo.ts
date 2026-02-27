@@ -1,6 +1,7 @@
 import { all, getOne, runSql } from "@/src/db";
 import { toYYYYMMDD } from "@/src/utils/goalDates";
 import { reward } from "../gamification/xpService";
+import { deleteGoalContribution } from "./contributions";
 
 export type Goal = {
   id: number;
@@ -63,6 +64,8 @@ export async function updateGoal(id: number, patch: Partial<Omit<Goal, "id">>) {
 
 export async function deleteGoal(id: number) {
   await runSql(`DELETE FROM saving_goals WHERE id = ?`, [id]);
+
+  await deleteGoalContribution(id); // Supprimer les contributions associées
 }
 
 export async function listGoals(activeOnly = true): Promise<Goal[]> {

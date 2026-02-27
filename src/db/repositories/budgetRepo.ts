@@ -138,4 +138,23 @@ export async function getBudgetDetailByID(id: number, periode: string) {
   }));
 }
 
-// export async function
+export async function getCatWithMoreExpense(month: number, year: number) {
+  const row = await getOne<{
+    category_id: number;
+    category_name: string;
+    total_spent: number;
+  }>(
+    `SELECT
+        c.id as category_id,
+        c.name as category_name,
+        COALESCE(SUM(t.amount), 0) as total_spent
+     FROM categories c
+     LEFT JOIN transactions t ON c.id = t.category_id AND t.type = 'depense' AND strftime('%m', t.date) = ? AND strftime('%Y', t.date) = ?
+     GROUP BY c.id, c.name
+     ORDER BY total_spent DESC
+     LIMIT 1`,
+    [month.toString().padStart(2, "0"), year.toString()],
+  );
+
+  return row;
+}
