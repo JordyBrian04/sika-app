@@ -4,38 +4,43 @@ import { COLORS } from "@/components/ui/color";
 import { BillingCycleCard } from "@/src/components/BillingCycleCard";
 import { listeCategories } from "@/src/db/repositories/category";
 import {
-    deleteRecurringPayment,
-    updateRecurringPayment,
+  deleteRecurringPayment,
+  updateRecurringPayment,
 } from "@/src/db/repositories/recurringRepo";
 import { listTransactions } from "@/src/db/repositories/transactions";
+import {
+  advanceRecurring,
+  insertTransactionFromRecurring,
+} from "@/src/notifications/recurringHandlers";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
-import { color } from "@/src/utils/colos";
+import { useAppTextColor } from "@/src/utils/colos";
 import { formatMoney } from "@/src/utils/format";
+import { toYYYYMMDD } from "@/src/utils/goalDates";
 import {
-    AntDesign,
-    Feather,
-    Ionicons,
-    MaterialCommunityIcons,
-    MaterialIcons,
+  AntDesign,
+  Feather,
+  Ionicons,
+  MaterialCommunityIcons,
+  MaterialIcons,
 } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -58,7 +63,7 @@ const DetailEvent = () => {
   }: any = useLocalSearchParams();
 
   //   console.log(remind_days_before, active, category_name);
-
+  const color = useAppTextColor();
   const [loading, setLoading] = React.useState(false);
   const [transactions, setTransactions] = React.useState<any[]>([]);
   const [transactionData, setTransactionData] = useState({
@@ -122,7 +127,6 @@ const DetailEvent = () => {
       active: transactionData.active === 1 ? 0 : 1,
     });
 
-    
   const handleSave = async () => {
     if (
       !transactionData.name ||
@@ -328,6 +332,30 @@ const DetailEvent = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const manualPay = async () => {
+    setLoading(true);
+
+    try {
+      const saved = await insertTransactionFromRecurring(
+        id,
+        toYYYYMMDD(new Date()),
+      );
+      if (saved) await advanceRecurring(saved);
+
+      fetchTransactions();
+      getConstant();
+    } catch (error) {
+      alert("Erreur de paiement");
+      console.error("Erreur de paiement ", error);
+    } finally {
+      setLoading(false);
+    }
+
+    // setTimeout(() => {
+    //   setLoading2(false);
+    // }, 5000);
   };
 
   function incomingPaiementModal() {
@@ -929,54 +957,10 @@ const DetailEvent = () => {
               gap: 6,
               opacity: loading ? 0.7 : 1,
             }}
-            onPress={() => openModal("incomingPaiementModal")}
-          >
-            <Feather name="edit" size={24} color={COLORS.white} />
-            <Text
-              style={{
-                color: COLORS.white,
-                fontFamily: FONT_FAMILY.medium,
-                fontSize: 16,
-              }}
-            >
-              Modifier les informations
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              padding: 15,
-              backgroundColor: COLORS.red,
-              borderRadius: 10,
-              alignItems: "center",
-              flexDirection: "row",
-              justifyContent: "center",
-              gap: 6,
-              opacity: loading ? 0.7 : 1,
-            }}
-            disabled={loading}
-            onPress={() => {
-              if (!loading && id) {
-                Alert.alert(
-                  "Confirmer la suppression",
-                  "Êtes-vous sûr de vouloir supprimer cette charge mensuelle ?",
-                  [
-                    {
-                      text: "Annuler",
-                      style: "cancel",
-                    },
-                    {
-                      text: "Supprimer",
-                      style: "destructive",
-                      onPress: handleDelete,
-                    },
-                  ],
-                );
-              }
-            }}
+            onPress={() => manualPay()}
           >
             <MaterialCommunityIcons
-              name="delete"
+              name="cash-edit"
               size={24}
               color={COLORS.white}
             />
@@ -987,10 +971,93 @@ const DetailEvent = () => {
                 fontSize: 16,
               }}
             >
-              Supprimer
+              Payer maintenant
             </Text>
-            {loading && <ActivityIndicator color={COLORS.white} />}
           </TouchableOpacity>
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                padding: 15,
+                backgroundColor: COLORS.primary,
+                borderRadius: 10,
+                alignItems: "center",
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 6,
+                opacity: loading ? 0.7 : 1,
+                width: "48%",
+              }}
+              onPress={() => openModal("incomingPaiementModal")}
+            >
+              <Feather name="edit" size={24} color={COLORS.white} />
+              <Text
+                style={{
+                  color: COLORS.white,
+                  fontFamily: FONT_FAMILY.medium,
+                  fontSize: 16,
+                }}
+              >
+                Modifier les informations
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                padding: 15,
+                backgroundColor: COLORS.red,
+                borderRadius: 10,
+                alignItems: "center",
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 6,
+                opacity: loading ? 0.7 : 1,
+                width: "48%",
+              }}
+              disabled={loading}
+              onPress={() => {
+                if (!loading && id) {
+                  Alert.alert(
+                    "Confirmer la suppression",
+                    "Êtes-vous sûr de vouloir supprimer cette charge mensuelle ?",
+                    [
+                      {
+                        text: "Annuler",
+                        style: "cancel",
+                      },
+                      {
+                        text: "Supprimer",
+                        style: "destructive",
+                        onPress: handleDelete,
+                      },
+                    ],
+                  );
+                }
+              }}
+            >
+              <MaterialCommunityIcons
+                name="delete"
+                size={24}
+                color={COLORS.white}
+              />
+              <Text
+                style={{
+                  color: COLORS.white,
+                  fontFamily: FONT_FAMILY.medium,
+                  fontSize: 16,
+                }}
+              >
+                Supprimer
+              </Text>
+              {loading && <ActivityIndicator color={COLORS.white} />}
+            </TouchableOpacity>
+          </View>
         </View>
       </ThemedView>
       {incomingPaiementModal()}

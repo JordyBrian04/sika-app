@@ -5,6 +5,7 @@ import { View } from "react-native";
 import { PieChart } from "react-native-gifted-charts";
 import { FONT_FAMILY } from "../theme/fonts";
 import { color } from "../utils/colos";
+import { formatMoney } from "../utils/format";
 
 export default function PieChartRender({ datas }: any) {
   const [focusedIndex, setFocusedIndex] = React.useState(
@@ -35,6 +36,9 @@ export default function PieChartRender({ datas }: any) {
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
+          flex: 1,
+          width: "90%",
+          rowGap: 2,
         }}
       >
         {datas.map((item: any, index: number) => (
@@ -44,11 +48,12 @@ export default function PieChartRender({ datas }: any) {
               flexDirection: "row",
               alignItems: "center",
               marginBottom: 5,
+              justifyContent: "flex-start",
             }}
           >
             {renderDot(item.color)}
             <ThemedText style={{ fontSize: 14 }}>
-              {item.label} : {item.value}%
+              {item.label} : {formatMoney(item.amount)} CFA soit {item.value}%
             </ThemedText>
           </View>
         ))}
@@ -95,7 +100,7 @@ export default function PieChartRender({ datas }: any) {
         focusOnPress
         onPress={(item: any) => setFocusedIndex(item)}
       />
-      {renderLegendComponent()}
+      {/* {renderLegendComponent()} */}
     </View>
   );
 }

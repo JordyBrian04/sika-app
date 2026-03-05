@@ -6,13 +6,16 @@ import { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import ProgressBar from "@/src/components/ProgressBar";
 import { Slider } from "@/src/components/Slider";
 import { getCatWithMoreExpense } from "@/src/db/repositories/budgetRepo";
+import { listeCategories } from "@/src/db/repositories/category";
 import { getMonthlyExpense } from "@/src/db/repositories/financeRepo";
+import { addTransaction } from "@/src/db/repositories/transactions";
 import {
   getAIInsights,
   getAIInsightsTop3,
 } from "@/src/services/goals/aiInsights";
 import {
   addContribution,
+  deleteGoalContribution,
   listContributions,
 } from "@/src/services/goals/contributions";
 import {
@@ -25,7 +28,8 @@ import { getGoalProjection } from "@/src/services/goals/insights";
 import { getGoalPlan } from "@/src/services/goals/planner";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
-import { color } from "@/src/utils/colos";
+import { useAppTextColor } from "@/src/utils/colos";
+import { toYYYYMMDD } from "@/src/utils/date";
 import { formatMoney } from "@/src/utils/format";
 import { diffDays } from "@/src/utils/goalDates";
 import {
@@ -66,6 +70,7 @@ const STROKE_WIDTH = 14;
 
 const DetailGoal = () => {
   const { id } = useLocalSearchParams();
+  const color = useAppTextColor();
   const [goals, setGoals] = React.useState<any>(null);
   const [goalDetails, setGoalDetails] = React.useState<any>(null);
   const [goalProjections, setGoalProjections] = React.useState<any>(null);
@@ -346,6 +351,18 @@ const DetailGoal = () => {
         source: "manual",
       });
 
+      const cat = await listeCategories();
+
+      await addTransaction({
+        amount: parseInt(contribution.amount),
+        type: "depense",
+        date: toYYYYMMDD(new Date()),
+        note: `Contribution sur l'épargne : ${goals.name}`,
+        category_id: cat.find(
+          (c) => c.name.toLowerCase().includes("autre") && c.type === "depense",
+        )?.id,
+      });
+
       closeModal();
       setContribution({
         amount: "0",
@@ -498,7 +515,7 @@ const DetailGoal = () => {
   );
 
   const renderItem = ({ item }: any) => (
-    <View
+    <TouchableOpacity
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -506,6 +523,32 @@ const DetailGoal = () => {
         padding: 10,
         gap: 8,
       }}
+      onLongPress={() =>
+        Alert.alert(
+          "Confirmation",
+          "Voulez-vous vraiment supprimer cette transaction ?",
+          [
+            { text: "Non", style: "cancel" },
+            {
+              text: "Oui",
+              style: "destructive",
+              onPress: async () => {
+                setLoading2(true);
+                try {
+                  await deleteGoalContribution(item.id);
+                  getDatas();
+                  alert("Supprimé avec succès");
+                } catch (error) {
+                  alert("Erreur de suppression");
+                  console.error("Erreur de suppression", error);
+                } finally {
+                  setLoading2(false);
+                }
+              },
+            },
+          ],
+        )
+      }
     >
       <View
         style={{
@@ -557,7 +600,7 @@ const DetailGoal = () => {
       >
         {formatMoney(item.amount)} CFA
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderFooter = () => (
@@ -1570,6 +1613,7 @@ const DetailGoal = () => {
                           }}
                         >
                           <View style={{ width: "30%" }} />
+
                           <TouchableOpacity
                             style={{
                               padding: 12,

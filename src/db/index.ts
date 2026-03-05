@@ -95,7 +95,7 @@ export async function migrate() {
   }
 }
 
-async function seedDefaults() {
+export async function seedDefaults() {
   // categories seed (only if empty)
   const row = await getOne<{ c: number }>(
     "SELECT COUNT(*) as c FROM categories;",
@@ -104,6 +104,7 @@ async function seedDefaults() {
   if ((row?.c ?? 0) > 0) return;
 
   const defaults = [
+    ["Autre dépense", "depense"],
     ["Alimentation", "depense"],
     ["Transport", "depense"],
     ["Loyer", "event"],

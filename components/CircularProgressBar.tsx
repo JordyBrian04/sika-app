@@ -1,5 +1,5 @@
 import { FONT_FAMILY } from "@/src/theme/fonts";
-import { color } from "@/src/utils/colos";
+import { useAppTextColor } from "@/src/utils/colos";
 import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import { Text, View } from "react-native";
 import { COLORS } from "./ui/color";
@@ -20,6 +20,7 @@ const CircularProgressBar = ({
   const innerRadius = radius - strokeWidth / 2;
   const path = Skia.Path.Make();
   path.addCircle(radius, radius, innerRadius);
+  const color = useAppTextColor();
 
   // console.log(
   //   "Rendering CircularProgressBar with percentage:",
@@ -65,14 +66,14 @@ const CircularProgressBar = ({
       <View
         style={{
           position: "absolute",
-          top: radius === 70 ? 50 : 30,
-          left: radius === 70 ? 40 : 30,
+          top: radius === 70 ? 50 : radius === 80 ? 60 : 30,
+          left: radius === 70 ? 40 : radius === 80 ? 45 : 30,
         }}
       >
         <Text
           style={{
             color: color,
-            fontSize: radius === 70 ? 28 : 20,
+            fontSize: radius === 70 ? 28 : radius === 80 ? 32 : 20,
             fontFamily: FONT_FAMILY.bold,
           }}
         >

@@ -3,30 +3,32 @@ import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import {
-    listTransactions,
-    TransactionRow,
+  deleteTransaction,
+  listTransactions,
+  TransactionRow,
 } from "@/src/db/repositories/transactions";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { formatMoney } from "@/src/utils/format";
 import {
-    AntDesign,
-    Ionicons,
-    MaterialCommunityIcons,
+  AntDesign,
+  Ionicons,
+  MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    FlatList,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -238,6 +240,17 @@ const ListeTransactions = () => {
       return noteMatch || categoryMatch;
     });
     setTransactions(groupTransactionsByDate(filtered));
+  };
+
+  const handleDelete = async (id: any) => {
+    try {
+      await deleteTransaction(id);
+      alert("Supprimé avec succès!");
+      fetchTransactions();
+    } catch (error) {
+      alert("Erreur de suppression");
+      console.error("erreur suppression transaction ", error);
+    }
   };
 
   function periodeModal() {
@@ -715,6 +728,20 @@ const ListeTransactions = () => {
                           },
                         })
                       // console.log("Transaction details on press:", trans)
+                    }
+                    onLongPress={() =>
+                      Alert.alert(
+                        "Suppression",
+                        "Voulez-vous vraiment supprimer cette transaction ?",
+                        [
+                          {
+                            text: "Oui",
+                            onPress: () => handleDelete(trans.id),
+                            style: "destructive",
+                          },
+                          { text: "Non", style: "cancel" },
+                        ],
+                      )
                     }
                   >
                     <View

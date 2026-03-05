@@ -4,6 +4,7 @@ import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import GaugeHalfCircle from "@/src/components/GaugeCard";
+import SwipeableTransaction from "@/src/components/SwipeableTransaction";
 import { CategoryInput, listeCategories } from "@/src/db/repositories/category";
 import {
   getMonthlyExpense,
@@ -16,9 +17,12 @@ import {
 import {
   addTransaction,
   listTransactions,
-  TransactionRow,
   TransactionType,
 } from "@/src/db/repositories/transactions";
+import {
+  advanceRecurring,
+  insertTransactionFromRecurring,
+} from "@/src/notifications/recurringHandlers";
 import { getConstante } from "@/src/services/AsyncStorage";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
 import { FONT_FAMILY } from "@/src/theme/fonts";
@@ -31,6 +35,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  FlatList,
   Image,
   Platform,
   RefreshControl,
@@ -43,6 +48,7 @@ import {
   View,
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
+import { Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -96,12 +102,9 @@ const interval = Array(999)
   .fill(0)
   .map((_, i) => i + 1);
 
-// function Number ({ value }:any) {
-//   const {number} = useSpring([
-//     from: { number: 0 },
-//     numbe
-//   ])
-// }
+const ACTION_WIDTH = 80;
+const MAX_LEFT_SWIPE = ACTION_WIDTH * 2;
+const MAX_RIGHT_SWIPE = ACTION_WIDTH;
 
 export default function HomeScreen() {
   const [user, setUser] = useState<LevelInfo | null>(null);
@@ -110,8 +113,6 @@ export default function HomeScreen() {
   const { openModal, closeModal, isVisible } = useModalQueue();
   const [loading, setLoading] = useState(false);
   const [option, setOption] = useState<TransactionType>("entree");
-  // console.log(interval);
-  // const [frequence, setOption] = useState<TransactionType>("entree");
   const [transactionData, setTransactionData] = useState({
     amount: "0",
     category_id: 0,
@@ -136,7 +137,7 @@ export default function HomeScreen() {
   const [date, setDate] = useState(new Date());
   const [keyReset, setKeyReset] = useState(0);
   const ref = useRef<BottomSheetRefProps>(null);
-  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [frequencyTransaction, setFrequencyTransaction] = useState<any[]>([]);
   const [balance, setBalance] = useState<{
     income: number;
@@ -155,6 +156,8 @@ export default function HomeScreen() {
   const opacity = useSharedValue(1);
   const [targetValue, setTargetValue] = useState<number>(0);
   const [solde, setSolde] = useState<number>(0);
+  const [loading2, setLoading2] = useState(false);
+  const [selectedId, setSelectedId] = useState<number>();
 
   const OPTIONS = [
     { key: "entree", label: "Entrée" },
@@ -174,6 +177,14 @@ export default function HomeScreen() {
   }, []);
 
   const ScrollViewRef = useRef<ScrollView>(null);
+
+  const SwipeAnimatedValue = useSharedValue(0);
+
+  const SwipeAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: SwipeAnimatedValue.value }],
+    };
+  });
 
   const toggleDatePicker = () => {
     setOpen(!open);
@@ -216,6 +227,25 @@ export default function HomeScreen() {
     setUser((await getProfile()) ?? null);
   };
 
+  const groupTransactionsByDate = (transactions: any[]) => {
+    const groups = transactions.reduce((acc, transaction) => {
+      const date = transaction.date;
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(transaction);
+      return acc;
+    }, {});
+
+    // On transforme l'objet en tableau pour le rendu
+    return Object.keys(groups)
+      .sort((a, b) => b.localeCompare(a))
+      .map((date) => ({
+        date,
+        data: groups[date],
+      }));
+  };
+
   const getConstant = async () => {
     const res = await getConstante("show_budget");
     setShowBudget(res === "enabled");
@@ -231,15 +261,14 @@ export default function HomeScreen() {
 
   const getDatas = async () => {
     const transactions = await listTransactions(10);
-    setDates([...new Set(transactions.map((t) => t.date))]);
-    console.log("Transactions:", transactions);
-    console.log("Unique dates:", ...new Set(transactions.map((t) => t.date)));
+    console.log("Transactions:", groupTransactionsByDate(transactions));
+    // console.log("Unique dates:", ...new Set(transactions.map((t) => t.date)));
     const balance = await getTotalBalance();
     animatedToValue(balance.balance);
     const budgetInfo = await getMonthlyExpense();
     console.log("Balance:", balance);
     console.log("Budget Info:", budgetInfo);
-    setTransactions(transactions);
+    setTransactions(groupTransactionsByDate(transactions));
     setFrequencyTransaction(await listUpcomingRecurring(10));
     console.log(
       "Transactions récurrentes à venir:",
@@ -248,14 +277,6 @@ export default function HomeScreen() {
     setBalance(balance);
     setBudgetInfo(budgetInfo);
   };
-
-  useFocusEffect(
-    useCallback(() => {
-      getUser();
-      getConstant();
-      getDatas();
-    }, []),
-  );
 
   const resetData = () => {
     setTransactionData({
@@ -293,8 +314,7 @@ export default function HomeScreen() {
       (!transactionData.name ||
         !transactionData.frequency ||
         transactionData.amount === "0" ||
-        transactionData.category_id === 0 ||
-        transactionData.date === new Date().toISOString().substring(0, 10))
+        transactionData.category_id === 0)
     ) {
       alert(
         "Veuillez remplir tous les champs obligatoires pour les charges mensuelles.",
@@ -316,7 +336,7 @@ export default function HomeScreen() {
           category_id: transactionData.category_id,
           frequency: transactionData.frequency,
           interval_count: parseInt(transactionData.interval_count),
-          next_date: transactionData.next_date,
+          next_date: transactionData.date,
           remind_days_before: transactionData.remind_days_before,
           active: transactionData.active,
         });
@@ -420,988 +440,818 @@ export default function HomeScreen() {
     };
   });
 
-  // const increment = () => animatedToValue();
-  // const decrement = () => animatedToValue();
-
   const toggleSwitch = () =>
     setTransactionData({
       ...transactionData,
       active: transactionData.active === 1 ? 0 : 1,
     });
 
-  // const [fontLoaded] = useFonts({
-  //   Bold: require("../../assets/fonts/Poppins-Bold.ttf"),
-  //   BoldItalic: require("../../assets/fonts/Poppins-BoldItalic.ttf"),
-  //   SemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
-  //   Regular: require("../../assets/fonts/Poppins-Regular.ttf"),
-  // });
+  const manualPay = async (id: number) => {
+    setSelectedId(id);
+    setLoading2(true);
 
-  // useEffect(() => {
-  //   if (fontLoaded) {
-  //     SplashScreen.hideAsync();
-  //   }
-  // }, [fontLoaded]);
+    try {
+      const saved = await insertTransactionFromRecurring(
+        id,
+        toYYYYMMDD(new Date()),
+      );
+      if (saved) await advanceRecurring(saved);
 
-  // if (!fontLoaded) {
-  //   return null;
-  // }
+      getDatas();
+    } catch (error) {
+      alert("Erreur de paiement");
+      console.error("Erreur de paiement ", error);
+    } finally {
+      setLoading2(false);
+    }
+
+    // setTimeout(() => {
+    //   setLoading2(false);
+    // }, 5000);
+  };
+
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {})
+    .onUpdate((event) => {
+      SwipeAnimatedValue.value = Math.min(
+        MAX_RIGHT_SWIPE,
+        Math.max(-MAX_LEFT_SWIPE, event.translationX),
+      );
+    })
+    .onEnd(() => {});
+
+  useFocusEffect(
+    useCallback(() => {
+      getUser();
+      getConstant();
+      getDatas();
+    }, []),
+  );
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ThemedView lightColor={COLORS.secondary}>
-        <ScrollView
-          contentContainerStyle={{
-            gap: 22,
-            flexDirection: "column",
-            padding: 10,
-            paddingBottom: 100,
-            flexGrow: 1,
-          }}
-          showsVerticalScrollIndicator={false}
-          nestedScrollEnabled
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={() => [getConstant(), getDatas()]}
-            />
-          }
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
+    <GestureHandlerRootView>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ThemedView lightColor={COLORS.secondary}>
+          <ScrollView
+            contentContainerStyle={{
+              gap: 22,
+              flexDirection: "column",
+              padding: 10,
+              paddingBottom: 100,
+              flexGrow: 1,
             }}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            refreshControl={
+              <RefreshControl
+                refreshing={loading}
+                onRefresh={() => [getConstant(), getDatas()]}
+              />
+            }
           >
-            <ThemedText
-              style={{
-                fontFamily: FONT_FAMILY.bold,
-                fontSize: 35,
-                color: COLORS.primary,
-              }}
-            >
-              S
-              <ThemedText
-                style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22 }}
-              >
-                ika
-              </ThemedText>
-            </ThemedText>
-
             <View
               style={{
                 flexDirection: "row",
+                justifyContent: "space-between",
                 alignItems: "center",
-                gap: 10,
               }}
             >
               <ThemedText
-                style={{ fontFamily: FONT_FAMILY.regular, fontSize: 14 }}
-              >
-                Bienvenue, {user?.name}
-              </ThemedText>
-              <Image
-                source={
-                  user?.gender === "male"
-                    ? require("../../assets/images/boy.png")
-                    : require("../../assets/images/woman.png")
-                }
-                style={{ width: 40, height: 40 }}
-              />
-            </View>
-          </View>
-
-          {/* Card */}
-          <View
-            style={{
-              backgroundColor: color === "#FFFFFF" ? COLORS.white : COLORS.dark,
-              borderRadius: 10,
-              padding: 15,
-              marginTop: 20,
-              gap: 8,
-            }}
-          >
-            <ThemedText
-              style={{
-                fontFamily: FONT_FAMILY.semibold,
-                color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-              }}
-            >
-              Solde Total
-            </ThemedText>
-            <Animated.Text
-              style={[
-                {
-                  fontFamily: FONT_FAMILY.bold,
-                  color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                  fontSize: 32,
-                },
-                animatedStyle,
-              ]}
-            >
-              {`${solde.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`}
-            </Animated.Text>
-            <ThemedText
-              style={{
-                fontFamily: FONT_FAMILY.regular,
-                color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                marginTop: 8,
-              }}
-            >
-              Budget mensuel
-            </ThemedText>
-            <View>
-              <View
                 style={{
-                  backgroundColor: COLORS.secondary,
-                  height: 10,
-                  borderRadius: 5,
-                  overflow: "hidden",
+                  fontFamily: FONT_FAMILY.bold,
+                  fontSize: 35,
+                  color: COLORS.primary,
                 }}
               >
-                <View
-                  style={{
-                    backgroundColor: budgetInfo
-                      ? budgetInfo.percentageUsed >= 70
-                        ? COLORS.red
-                        : budgetInfo.percentageUsed >= 50
-                          ? COLORS.orange
-                          : COLORS.primary
-                      : COLORS.primary,
-                    height: 10,
-                    width: budgetInfo ? `${budgetInfo.percentageUsed}%` : "0%",
-                  }}
+                S
+                <ThemedText
+                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22 }}
+                >
+                  ika
+                </ThemedText>
+              </ThemedText>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <ThemedText
+                  style={{ fontFamily: FONT_FAMILY.regular, fontSize: 14 }}
+                >
+                  Bienvenue, {user?.name}
+                </ThemedText>
+                <Image
+                  source={
+                    user?.gender === "male"
+                      ? require("../../assets/images/boy.png")
+                      : require("../../assets/images/woman.png")
+                  }
+                  style={{ width: 40, height: 40 }}
                 />
               </View>
+            </View>
+
+            {/* Card */}
+            <View
+              style={{
+                backgroundColor:
+                  color === "#FFFFFF" ? COLORS.white : COLORS.dark,
+                borderRadius: 10,
+                padding: 15,
+                marginTop: 20,
+                gap: 8,
+              }}
+            >
+              <ThemedText
+                style={{
+                  fontFamily: FONT_FAMILY.semibold,
+                  color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                }}
+              >
+                Solde Total
+              </ThemedText>
+              <Animated.Text
+                style={[
+                  {
+                    fontFamily: FONT_FAMILY.bold,
+                    color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                    fontSize: 32,
+                  },
+                  animatedStyle,
+                ]}
+              >
+                {`${solde.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`}
+              </Animated.Text>
+              <ThemedText
+                style={{
+                  fontFamily: FONT_FAMILY.regular,
+                  color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                  marginTop: 8,
+                }}
+              >
+                Budget mensuel
+              </ThemedText>
+              <View>
+                <View
+                  style={{
+                    backgroundColor: COLORS.secondary,
+                    height: 10,
+                    borderRadius: 5,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      backgroundColor: budgetInfo
+                        ? budgetInfo.percentageUsed >= 70
+                          ? COLORS.red
+                          : budgetInfo.percentageUsed >= 50
+                            ? COLORS.orange
+                            : COLORS.primary
+                        : COLORS.primary,
+                      height: 10,
+                      width: budgetInfo
+                        ? `${budgetInfo.percentageUsed}%`
+                        : "0%",
+                    }}
+                  />
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <ThemedText
+                    style={{
+                      fontFamily: FONT_FAMILY.regular,
+                      marginTop: 4,
+                      color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                      fontSize: 12,
+                    }}
+                  >
+                    Depensé :{" "}
+                    <Text style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      {budgetInfo
+                        ? `${budgetInfo.totalExpense.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
+                        : "Loading..."}{" "}
+                    </Text>
+                    /{" "}
+                    {budgetInfo
+                      ? `${budgetInfo.totalBudget.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
+                      : "Loading..."}
+                  </ThemedText>
+
+                  <Text
+                    style={{
+                      color: COLORS.primary,
+                      fontFamily: FONT_FAMILY.semibold,
+                      fontSize: 12,
+                    }}
+                  >
+                    {budgetInfo
+                      ? `${budgetInfo.percentageUsed.toFixed(0)}%`
+                      : "Loading..."}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor:
+                    color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                  padding: 12,
+                  borderRadius: 16,
+                  alignItems: "center",
+                  marginTop: 10,
+                }}
+                onPress={() => toggleSheet()}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONT_FAMILY.semibold,
+                    color: color === "#FFFFFF" ? COLORS.white : COLORS.dark,
+                  }}
+                >
+                  Nouvelle transaction
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {/* Fin card */}
+
+            {/* Payement à venir */}
+            <View style={{ gap: 8, marginTop: 20 }}>
               <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
+                  alignItems: "center",
                 }}
               >
                 <ThemedText
-                  style={{
-                    fontFamily: FONT_FAMILY.regular,
-                    marginTop: 4,
-                    color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                    fontSize: 12,
-                  }}
+                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 20 }}
                 >
-                  Depensé :{" "}
-                  <Text style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    {budgetInfo
-                      ? `${budgetInfo.totalExpense.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
-                      : "Loading..."}{" "}
-                  </Text>
-                  /{" "}
-                  {budgetInfo
-                    ? `${budgetInfo.totalBudget.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
-                    : "Loading..."}
+                  Paiement à venir
                 </ThemedText>
-
-                <Text
-                  style={{
-                    color: COLORS.primary,
-                    fontFamily: FONT_FAMILY.semibold,
-                    fontSize: 12,
-                  }}
+                <TouchableOpacity
+                  onPress={() => router.navigate("/(screens)/IncomingEvent")}
                 >
-                  {budgetInfo
-                    ? `${budgetInfo.percentageUsed.toFixed(0)}%`
-                    : "Loading..."}
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={{
-                backgroundColor:
-                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                padding: 12,
-                borderRadius: 16,
-                alignItems: "center",
-                marginTop: 10,
-              }}
-              onPress={() => toggleSheet()}
-            >
-              <Text
-                style={{
-                  fontFamily: FONT_FAMILY.semibold,
-                  color: color === "#FFFFFF" ? COLORS.white : COLORS.dark,
-                }}
-              >
-                Nouvelle transaction
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {/* Fin card */}
-
-          {/* Payement à venir */}
-          <View style={{ gap: 8, marginTop: 20 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <ThemedText
-                style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 20 }}
-              >
-                Paiement à venir
-              </ThemedText>
-              <TouchableOpacity
-                onPress={() => router.navigate("/(screens)/IncomingEvent")}
-              >
-                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-                  Voir plus
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ gap: 12, marginTop: 10 }}
-              contentContainerStyle={{ gap: 13 }}
-            >
-              {frequencyTransaction.length === 0 ? (
-                <View>
-                  <ThemedText
-                    style={{
-                      textAlign: "center",
-                      marginTop: 50,
-                      color: "#808080",
-                      fontFamily: FONT_FAMILY.medium,
-                    }}
-                  >
-                    Aucune transaction récurrente à venir dans les 60 prochains
-                    jours.
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
+                    Voir plus
                   </ThemedText>
-                </View>
-              ) : (
-                <>
-                  {frequencyTransaction.map((t: any) => (
-                    <TouchableOpacity
-                      key={t.id}
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ gap: 12, marginTop: 10 }}
+                contentContainerStyle={{ gap: 13 }}
+              >
+                {frequencyTransaction.length === 0 ? (
+                  <View>
+                    <ThemedText
                       style={{
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        padding: 10,
-                        backgroundColor:
-                          color === "#FFFFFF" ? COLORS.noir : COLORS.white,
-                        gap: 8,
-                        width: 200,
+                        textAlign: "center",
+                        marginTop: 50,
+                        color: "#808080",
+                        fontFamily: FONT_FAMILY.medium,
                       }}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/(screens)/DetailEvent",
-                          params: {
-                            id: t.id,
-                            name: t.name,
-                            amount: t.amount.toString(),
-                            category_id: t.category_id,
-                            category_name:
-                              OldCategories.find((c) => c.id === t.category_id)
-                                ?.name || "Aucune",
-                            frequency: t.frequency,
-                            interval_count: t.interval_count.toString(),
-                            next_date: t.next_date,
-                            remind_days_before: t.remind_days_before,
-                            active: t.active,
-                            daysLate: t.daysLate,
-                          },
-                        })
-                      }
                     >
-                      <Image
-                        source={
-                          t.name.toLowerCase().includes("netflix")
-                            ? require("../../assets/images/netflix.png")
-                            : t.name.toLowerCase().includes("loyer")
-                              ? require("../../assets/images/3d-house.png")
-                              : t.name.toLowerCase().includes("amazon")
-                                ? require("../../assets/images/amazon.png")
-                                : t.name.toLowerCase().includes("facture")
-                                  ? require("../../assets/images/bill.png")
-                                  : t.name.toLowerCase().includes("canca")
-                                    ? require("../../assets/images/canva.jpg")
-                                    : t.name.toLowerCase().includes("chatgpt")
-                                      ? require("../../assets/images/chatgpt.png")
-                                      : t.name
-                                            .toLowerCase()
-                                            .includes("facebook")
-                                        ? require("../../assets/images/facebook.png")
-                                        : t.name
-                                              .toLowerCase()
-                                              .includes("gemini")
-                                          ? require("../../assets/images/gemini.jpg")
-                                          : t.name
-                                                .toLowerCase()
-                                                .includes("spotify")
-                                            ? require("../../assets/images/spotify.png")
-                                            : t.name
-                                                  .toLowerCase()
-                                                  .includes("instagram")
-                                              ? require("../../assets/images/instagram.png")
-                                              : t.name
-                                                    .toLowerCase()
-                                                    .includes("prime")
-                                                ? require("../../assets/images/prime.png")
-                                                : t.name
-                                                      .toLowerCase()
-                                                      .includes("tiktok")
-                                                  ? require("../../assets/images/tiktok.png")
-                                                  : t.name
-                                                        .toLowerCase()
-                                                        .includes("upwork")
-                                                    ? require("../../assets/images/upwork.png")
-                                                    : t.name
-                                                          .toLowerCase()
-                                                          .includes("youtube")
-                                                      ? require("../../assets/images/youtube.png")
-                                                      : require("../../assets/images/schedule.png")
-                        }
-                        style={{ width: 70, height: 70, borderRadius: 16 }}
-                      />
-                      <ThemedText style={{ fontFamily: "SemiBold" }}>
-                        {t.name}
-                      </ThemedText>
-                      <ThemedText
-                        style={{ fontFamily: "Regular", fontSize: 12 }}
-                      >
-                        {new Date(t.next_date).toLocaleDateString("fr-FR", {
-                          day: "numeric",
-                          month: "long",
-                        })}
-                      </ThemedText>
-                      <ThemedText style={{ fontFamily: "Bold" }}>
-                        {formatMoney(t.amount)} FCFA
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </>
-              )}
-            </ScrollView>
-          </View>
-          {/* Fin Payement à venir */}
-
-          {/* Liste des transactions */}
-          <View style={{ gap: 8, marginTop: 20 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <ThemedText
-                style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 20 }}
-              >
-                Reçentes transactions
-              </ThemedText>
-              <TouchableOpacity
-                onPress={() => router.navigate("/(screens)/ListeTransactions")}
-              >
-                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-                  Voir plus
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-
-            {[...new Set(transactions.map((t) => t.date))].map(
-              (date: any, index: number) => (
-                <View key={index}>
-                  {/* Date */}
-                  <View
-                    key={date}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      // backgroundColor:
-                      //   color === "#FFFFFF" ? COLORS.noir : COLORS.white,
-                      padding: 10,
-                      // borderRadius: 16,
-                      alignItems: "center",
-                    }}
-                  >
-                    <ThemedText>{prettyDate(date)}</ThemedText>
-                    <View
-                      style={{
-                        backgroundColor:
-                          color === "#FFFFFF"
-                            ? COLORS.secondary
-                            : "rgba(0, 0, 0, 0.14)",
-                        height: 2,
-                        borderRadius: 5,
-                        overflow: "hidden",
-                        width: "75%",
-                        right: 0,
-                        marginLeft: 10,
-                      }}
-                    />
+                      Aucune transaction récurrente.
+                    </ThemedText>
                   </View>
-                  {/* Fin Date */}
-
-                  {/* transactions */}
-                  {transactions
-                    .filter((t) => t.date === date)
-                    .map((transaction: any) => (
+                ) : (
+                  <>
+                    {frequencyTransaction.map((t: any) => (
                       <TouchableOpacity
-                        key={transaction.id}
+                        key={t.id}
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          // width: "100%",
+                          borderRadius: 16,
+                          overflow: "hidden",
+                          padding: 10,
+                          backgroundColor:
+                            color === "#FFFFFF" ? COLORS.noir : COLORS.white,
                           gap: 8,
-                          marginBottom: 10,
+                          width: 200,
                         }}
                         onPress={() =>
                           router.push({
-                            pathname: "/(screens)/DetailTransactions",
+                            pathname: "/(screens)/DetailEvent",
                             params: {
-                              id: transaction.id,
-                              amount: transaction.amount,
-                              note: transaction.note,
-                              date: transaction.date,
-                              name: transaction.category_name,
-                              type: transaction.type,
-                              created_at: transaction.created_at,
+                              id: t.id,
+                              name: t.name,
+                              amount: t.amount.toString(),
+                              category_id: t.category_id,
+                              category_name:
+                                OldCategories.find(
+                                  (c) => c.id === t.category_id,
+                                )?.name || "Aucune",
+                              frequency: t.frequency,
+                              interval_count: t.interval_count.toString(),
+                              next_date: t.next_date,
+                              remind_days_before: t.remind_days_before,
+                              active: t.active,
+                              daysLate: t.daysLate,
                             },
                           })
                         }
                       >
-                        <View
+                        <Image
+                          source={
+                            t.name.toLowerCase().includes("netflix")
+                              ? require("../../assets/images/netflix.png")
+                              : t.name.toLowerCase().includes("loyer")
+                                ? require("../../assets/images/3d-house.png")
+                                : t.name.toLowerCase().includes("amazon")
+                                  ? require("../../assets/images/amazon.png")
+                                  : t.name.toLowerCase().includes("facture")
+                                    ? require("../../assets/images/bill.png")
+                                    : t.name.toLowerCase().includes("canca")
+                                      ? require("../../assets/images/canva.jpg")
+                                      : t.name.toLowerCase().includes("chatgpt")
+                                        ? require("../../assets/images/chatgpt.png")
+                                        : t.name
+                                              .toLowerCase()
+                                              .includes("facebook")
+                                          ? require("../../assets/images/facebook.png")
+                                          : t.name
+                                                .toLowerCase()
+                                                .includes("gemini")
+                                            ? require("../../assets/images/gemini.jpg")
+                                            : t.name
+                                                  .toLowerCase()
+                                                  .includes("spotify")
+                                              ? require("../../assets/images/spotify.png")
+                                              : t.name
+                                                    .toLowerCase()
+                                                    .includes("instagram")
+                                                ? require("../../assets/images/instagram.png")
+                                                : t.name
+                                                      .toLowerCase()
+                                                      .includes("prime")
+                                                  ? require("../../assets/images/prime.png")
+                                                  : t.name
+                                                        .toLowerCase()
+                                                        .includes("tiktok")
+                                                    ? require("../../assets/images/tiktok.png")
+                                                    : t.name
+                                                          .toLowerCase()
+                                                          .includes("upwork")
+                                                      ? require("../../assets/images/upwork.png")
+                                                      : t.name
+                                                            .toLowerCase()
+                                                            .includes("youtube")
+                                                        ? require("../../assets/images/youtube.png")
+                                                        : require("../../assets/images/schedule.png")
+                          }
+                          style={{ width: 70, height: 70, borderRadius: 16 }}
+                        />
+                        <ThemedText style={{ fontFamily: "SemiBold" }}>
+                          {t.name}
+                        </ThemedText>
+                        <ThemedText
+                          style={{ fontFamily: "Regular", fontSize: 12 }}
+                        >
+                          {new Date(t.next_date).toLocaleDateString("fr-FR", {
+                            day: "numeric",
+                            month: "long",
+                          })}
+                        </ThemedText>
+                        <ThemedText style={{ fontFamily: "Bold" }}>
+                          {formatMoney(t.amount)} FCFA
+                        </ThemedText>
+                        <TouchableOpacity
                           style={{
                             backgroundColor:
                               color === "#FFFFFF"
                                 ? COLORS.secondary
                                 : COLORS.dark,
-                            padding: 15,
-                            borderRadius: 8,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 15,
-                            width: 60,
+                            padding: 12,
+                            borderRadius: 15,
                             justifyContent: "center",
-                            height: 60,
+                            alignItems: "center",
+                            opacity: loading2 ? 0.7 : 1,
+                            flexDirection: "row",
+                            gap: 6,
                           }}
+                          onPress={async () => manualPay(t.id)}
+                          disabled={loading2}
                         >
-                          <Image
-                            source={
-                              transaction.category_name
-                                ?.toLowerCase()
-                                .includes("alimentation")
-                                ? require("../../assets/images/diet.png")
-                                : transaction.category_name
-                                      ?.toLowerCase()
-                                      .includes("transport")
-                                  ? require("../../assets/images/transportation.png")
-                                  : transaction.category_name
-                                        ?.toLowerCase()
-                                        .includes("facture")
-                                    ? require("../../assets/images/bill.png")
-                                    : transaction.category_name
-                                          ?.toLowerCase()
-                                          .includes("abonnement")
-                                      ? require("../../assets/images/membership.png")
-                                      : transaction.category_name
-                                            ?.toLowerCase()
-                                            .includes("sante")
-                                        ? require("../../assets/images/pills.png")
-                                        : transaction.category_name
-                                              ?.toLowerCase()
-                                              .includes("loisirs")
-                                          ? require("../../assets/images/theater.png")
-                                          : transaction.category_name
-                                                ?.toLowerCase()
-                                                .includes("salaire")
-                                            ? require("../../assets/images/payroll.png")
-                                            : transaction.category_name
-                                                  ?.toLowerCase()
-                                                  .includes("depart")
-                                              ? require("../../assets/images/salary.png")
-                                              : transaction.category_name
-                                                    ?.toLowerCase()
-                                                    .includes("mission")
-                                                ? require("../../assets/images/mission.png")
-                                                : transaction.category_name
-                                                      ?.toLowerCase()
-                                                      .includes("famille")
-                                                  ? require("../../assets/images/big-family.png")
-                                                  : transaction.category_name
-                                                        ?.toLowerCase()
-                                                        .includes("education")
-                                                    ? require("../../assets/images/stack-of-books.png")
-                                                    : transaction.category_name
-                                                          ?.toLowerCase()
-                                                          .includes("shopping")
-                                                      ? require("../../assets/images/online-shopping.png")
-                                                      : transaction.category_name
-                                                            ?.toLowerCase()
-                                                            .includes(
-                                                              "téléphone/internet",
-                                                            )
-                                                        ? require("../../assets/images/iphone.png")
-                                                        : transaction.category_name
-                                                              ?.toLowerCase()
-                                                              .includes("soin")
-                                                          ? require("../../assets/images/lotions.png")
-                                                          : require("../../assets/images/shapes.png")
-                            }
-                            // tintColor={
-                            //   color === "#FFFFFF" ? COLORS.white : COLORS.dark
-                            // }
-                            style={{ width: 40, height: 40 }}
-                          />
-                        </View>
-                        <View
-                          style={{
-                            flexDirection: "column",
-                            gap: 4,
-                            width: "100%",
-                          }}
-                        >
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              width: "80%",
-                            }}
-                          >
-                            <ThemedText
-                              style={{
-                                fontFamily: FONT_FAMILY.semibold,
-                                width: "60%",
-                                // ellipsizeMode: "tail",
-                                // flexWrap: "wrap",
-                              }}
-                              ellipsizeMode="tail"
-                              numberOfLines={1}
-                            >
-                              {transaction.note}
-                            </ThemedText>
-                            <ThemedText
+                          {loading2 && selectedId === t.id ? (
+                            <ActivityIndicator
+                              color={
+                                color === "#FFFFFF" ? COLORS.dark : COLORS.white
+                              }
+                            />
+                          ) : (
+                            <Text
                               style={{
                                 fontFamily: FONT_FAMILY.bold,
-                                fontSize: 14,
-                                textAlign: "right",
                                 color:
-                                  transaction.type === "depense"
-                                    ? COLORS.red
-                                    : COLORS.green,
+                                  color === "#FFFFFF"
+                                    ? COLORS.dark
+                                    : COLORS.white,
+                                fontSize: 13,
                               }}
                             >
-                              {formatMoney(transaction.amount)} CFA
-                            </ThemedText>
-                          </View>
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              width: "80%",
-                            }}
-                          >
-                            <ThemedText
-                              style={{
-                                fontFamily: FONT_FAMILY.regular,
-                                color: COLORS.gray,
-                              }}
-                            >
-                              {transaction.category_name || "Autre"}
-                            </ThemedText>
-                            <ThemedText
-                              style={{
-                                fontFamily: FONT_FAMILY.regular,
-                                fontSize: 14,
-                                color: COLORS.gray,
-                              }}
-                            >
-                              {transaction.type === "depense"
-                                ? "Dépense"
-                                : "Revenu"}
-                            </ThemedText>
-                          </View>
-                        </View>
+                              Payer maintenant{" "}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
                       </TouchableOpacity>
                     ))}
-                </View>
-              ),
-            )}
-          </View>
-          {/* Fin Liste des transactions */}
+                  </>
+                )}
+              </ScrollView>
+            </View>
+            {/* Fin Payement à venir */}
 
-          {/* Mes xp */}
-          <View>
-            <GaugeHalfCircle
-              value={user?.xpIntoLevel ?? 0}
-              level={user?.level ?? 1}
-              max={user?.xpForNextLevel ?? 100}
-            />
-          </View>
-        </ScrollView>
-      </ThemedView>
-
-      <BottomSheet ref={ref}>
-        <ScrollView
-          ref={ScrollViewRef}
-          keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={true}
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            padding: 20,
-            gap: 20,
-            paddingBottom: 150,
-            // height: SCREEN_HEIGHT,
-            // backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-            zIndex: 999,
-            width: "100%",
-            // flex: 1,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              backgroundColor: COLORS.secondary,
-              // padding: 10,
-              borderRadius: 50,
-              alignItems: "center",
-            }}
-          >
-            {OPTIONS.map((opt: any) => (
-              <AnimatedPressable
-                layout={LinearTransition.springify().mass(0.5)}
-                key={opt.key}
-                style={{
-                  alignItems: "center",
-                  padding: 12,
-                  borderRadius: 25,
-                  backgroundColor:
-                    option === opt.key ? COLORS.dark : "transparent",
-                }}
-                onPress={() => handleTypeChange(opt.key)}
-              >
-                <Animated.Text
-                  entering={FadeIn.duration(200)}
-                  exiting={FadeOut.duration(200)}
-                  style={{
-                    fontFamily:
-                      option === opt.key
-                        ? FONT_FAMILY.semibold
-                        : FONT_FAMILY.regular,
-                    color: option === opt.key ? COLORS.white : COLORS.dark,
-                  }}
-                >
-                  {opt.label}
-                </Animated.Text>
-              </AnimatedPressable>
-            ))}
-          </View>
-
-          <View
-            style={{
-              gap: 8,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-              Montant (CFA)
-            </ThemedText>
-            <TextInput
-              placeholder="0"
-              keyboardType="numeric"
-              style={{
-                fontFamily: FONT_FAMILY.bold,
-                fontSize: 24,
-                width: "100%",
-                color: color,
-                textAlign: "center",
-              }}
-              placeholderTextColor={color}
-              onChangeText={(e) =>
-                setTransactionData({
-                  ...transactionData,
-                  amount: e,
-                })
-              }
-              value={transactionData.amount}
-            />
-          </View>
-
-          {transactionData.type !== "event" && (
-            <>
+            {/* Liste des transactions */}
+            <View style={{ gap: 8, marginTop: 20 }}>
               <View
                 style={{
                   flexDirection: "row",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  // width: "100%",
-                  justifyContent: "center",
-                  gap: 12,
                 }}
               >
-                <SelectList
-                  data={categories}
-                  key={keyReset}
-                  setSelected={(val: string) =>
-                    setTransactionData({
-                      ...transactionData,
-                      category_id: parseInt(val),
-                    })
-                  }
-                  placeholder="Choisir une catégorie"
-                  inputStyles={{
-                    color: color,
-                    fontFamily: FONT_FAMILY.regular,
-                  }}
-                  searchPlaceholder="Entrez une catégorie"
-                  dropdownTextStyles={{
-                    color: color,
-                    fontFamily: FONT_FAMILY.regular,
-                  }}
-                  closeicon={<Ionicons name="close" size={18} color={color} />}
-                  searchicon={
-                    <Ionicons name="search" size={18} color={color} />
-                  }
-                  arrowicon={
-                    <Feather name="chevron-down" size={24} color={color} />
-                  }
-                  save="key"
-                />
-
-                <View
-                  style={
-                    {
-                      // flexDirection: "row",
-                      // alignItems: "center",
-                      // width: "70%",
-                      // justifyContent: "space-between",
-                    }
+                <ThemedText
+                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 20 }}
+                >
+                  Reçentes transactions
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.navigate("/(screens)/ListeTransactions")
                   }
                 >
-                  {open && (
-                    <DateTimePicker
-                      mode="date"
-                      display="spinner"
-                      value={date}
-                      onChange={onChange}
-                      style={{
-                        height: 120,
-                        marginTop: 20,
-                        width: "100%",
-                      }}
-                      textColor="#000"
-                    />
-                  )}
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
+                    Voir plus
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
 
-                  {open && Platform.OS === "ios" && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-around",
-                        marginBottom: 20,
-                      }}
-                    >
-                      <TouchableOpacity
+              {transactions && transactions.length > 0 && (
+                <FlatList
+                  data={transactions}
+                  keyExtractor={(item) => item.date}
+                  renderItem={({ item }) => (
+                    <View style={{ marginBottom: 20 }}>
+                      <Text
                         style={{
-                          padding: 10,
-                          backgroundColor: "gray",
-                          borderRadius: 10,
+                          fontFamily: FONT_FAMILY.medium,
+                          fontSize: 16,
+                          marginBottom: 10,
+                          color: "#888",
                         }}
-                        onPress={toggleDatePicker}
                       >
-                        <Text style={{ color: "black", fontWeight: "bold" }}>
-                          Annuler
-                        </Text>
-                      </TouchableOpacity>
+                        {item.date === new Date().toISOString().split("T")[0]
+                          ? "Aujourd'hui"
+                          : new Date(item.date).toLocaleDateString("fr-FR", {
+                              day: "numeric",
+                              month: "long",
+                            })}
+                      </Text>
 
-                      <TouchableOpacity
-                        style={{
-                          padding: 10,
-                          backgroundColor: "gray",
-                          borderRadius: 10,
-                        }}
-                        onPress={confirmIOSDate}
-                      >
-                        <Text style={{ color: "black", fontWeight: "bold" }}>
-                          Valider
-                        </Text>
-                      </TouchableOpacity>
+                      {item.data.map((trans: any) => (
+                        <SwipeableTransaction
+                          key={trans.id}
+                          trans={trans}
+                          router={router}
+                          color={color}
+                        />
+                        // <GestureDetector key={trans.id} gesture={panGesture}>
+                        //   <Animated.View style={SwipeAnimatedStyle}>
+                        //     <TouchableOpacity
+                        //       key={trans.id}
+                        //       style={{
+                        //         flexDirection: "row",
+                        //         justifyContent: "space-around",
+                        //         alignItems: "center",
+                        //         backgroundColor:
+                        //           color === "#FFFFFF"
+                        //             ? COLORS.dark
+                        //             : COLORS.secondary,
+                        //         padding: 10,
+                        //         borderRadius: 8,
+                        //         marginBottom: 8,
+                        //       }}
+                        //       onPress={
+                        //         () =>
+                        //           router.push({
+                        //             pathname: "/(screens)/DetailTransactions",
+                        //             params: {
+                        //               id: trans.id,
+                        //               amount: trans.amount,
+                        //               note: trans.note,
+                        //               date: trans.date,
+                        //               name: trans.category_name,
+                        //               type: trans.type,
+                        //               created_at: trans.created_at,
+                        //             },
+                        //           })
+                        //         // console.log("Transaction details on press:", trans)
+                        //       }
+                        //       onLongPress={() =>
+                        //         Alert.alert(
+                        //           "Suppression",
+                        //           "Voulez-vous vraiment supprimer cette transaction ?",
+                        //           [
+                        //             {
+                        //               text: "Oui",
+                        //               // onPress: () => handleDelete(trans.id),
+                        //               style: "destructive",
+                        //             },
+                        //             { text: "Non", style: "cancel" },
+                        //           ],
+                        //         )
+                        //       }
+                        //     >
+                        //       <View
+                        //         style={{
+                        //           backgroundColor:
+                        //             color === "#FFFFFF"
+                        //               ? COLORS.secondary
+                        //               : COLORS.dark,
+                        //           padding: 15,
+                        //           borderRadius: 8,
+                        //           flexDirection: "row",
+                        //           alignItems: "center",
+                        //           gap: 15,
+                        //           width: 50,
+                        //           justifyContent: "center",
+                        //           height: 50,
+                        //         }}
+                        //       >
+                        //         <Image
+                        //           source={
+                        //             trans.category_name
+                        //               ?.toLowerCase()
+                        //               .includes("alimentation")
+                        //               ? require("../../assets/images/diet.png")
+                        //               : trans.category_name
+                        //                     ?.toLowerCase()
+                        //                     .includes("transport")
+                        //                 ? require("../../assets/images/transportation.png")
+                        //                 : trans.category_name
+                        //                       ?.toLowerCase()
+                        //                       .includes("facture")
+                        //                   ? require("../../assets/images/bill.png")
+                        //                   : trans.category_name
+                        //                         ?.toLowerCase()
+                        //                         .includes("abonnement")
+                        //                     ? require("../../assets/images/membership.png")
+                        //                     : trans.category_name
+                        //                           ?.toLowerCase()
+                        //                           .includes("sante")
+                        //                       ? require("../../assets/images/pills.png")
+                        //                       : trans.category_name
+                        //                             ?.toLowerCase()
+                        //                             .includes("loisirs")
+                        //                         ? require("../../assets/images/theater.png")
+                        //                         : trans.category_name
+                        //                               ?.toLowerCase()
+                        //                               .includes("salaire")
+                        //                           ? require("../../assets/images/payroll.png")
+                        //                           : trans.category_name
+                        //                                 ?.toLowerCase()
+                        //                                 .includes("depart")
+                        //                             ? require("../../assets/images/salary.png")
+                        //                             : trans.category_name
+                        //                                   ?.toLowerCase()
+                        //                                   .includes("mission")
+                        //                               ? require("../../assets/images/mission.png")
+                        //                               : trans.category_name
+                        //                                     ?.toLowerCase()
+                        //                                     .includes("famille")
+                        //                                 ? require("../../assets/images/big-family.png")
+                        //                                 : trans.category_name
+                        //                                       ?.toLowerCase()
+                        //                                       .includes(
+                        //                                         "education",
+                        //                                       )
+                        //                                   ? require("../../assets/images/stack-of-books.png")
+                        //                                   : trans.category_name
+                        //                                         ?.toLowerCase()
+                        //                                         .includes(
+                        //                                           "shopping",
+                        //                                         )
+                        //                                     ? require("../../assets/images/online-shopping.png")
+                        //                                     : trans.category_name
+                        //                                           ?.toLowerCase()
+                        //                                           .includes(
+                        //                                             "téléphone/internet",
+                        //                                           )
+                        //                                       ? require("../../assets/images/iphone.png")
+                        //                                       : trans.category_name
+                        //                                             ?.toLowerCase()
+                        //                                             .includes(
+                        //                                               "soin",
+                        //                                             )
+                        //                                         ? require("../../assets/images/lotions.png")
+                        //                                         : require("../../assets/images/shapes.png")
+                        //           }
+                        //           // tintColor={
+                        //           //   color === "#FFFFFF" ? COLORS.white : COLORS.dark
+                        //           // }
+                        //           style={{ width: 30, height: 30 }}
+                        //         />
+                        //       </View>
+
+                        //       <View style={{ width: 170, gap: 4 }}>
+                        //         <ThemedText
+                        //           style={{
+                        //             fontSize: 14,
+                        //             fontFamily: FONT_FAMILY.semibold,
+                        //           }}
+                        //           ellipsizeMode="tail"
+                        //           numberOfLines={1}
+                        //         >
+                        //           {trans.note}
+                        //         </ThemedText>
+                        //         <ThemedText
+                        //           style={{
+                        //             fontSize: 12,
+                        //             fontFamily: FONT_FAMILY.medium,
+                        //           }}
+                        //         >
+                        //           {trans.created_at.split(" ")[1]} ●{" "}
+                        //           {trans.category_name}
+                        //         </ThemedText>
+                        //       </View>
+
+                        //       <ThemedText
+                        //         style={{
+                        //           fontSize: 14,
+                        //           fontFamily: FONT_FAMILY.semibold,
+                        //           // color:
+                        //           //   color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                        //         }}
+                        //       >
+                        //         {formatMoney(trans.amount)} CFA
+                        //       </ThemedText>
+                        //     </TouchableOpacity>
+                        //   </Animated.View>
+                        // </GestureDetector>
+                      ))}
                     </View>
                   )}
-
-                  {!open && (
-                    <TouchableOpacity onPress={toggleDatePicker}>
-                      <TextInput
-                        placeholder="Date debut"
-                        placeholderTextColor="#000"
+                  scrollEnabled={false}
+                  showsVerticalScrollIndicator={false}
+                  // contentContainerStyle={{ flex: 1 }}
+                  ListEmptyComponent={() => (
+                    <View
+                      style={{
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flex: 1,
+                        gap: 12,
+                      }}
+                    >
+                      <ThemedText
                         style={{
-                          borderWidth: 1,
-                          borderColor: "gray",
-                          padding: 10,
-                          borderRadius: 10,
-                          color: color,
-                          height: 52,
-                          width: 145,
+                          fontFamily: FONT_FAMILY.semibold,
+                          fontSize: 17,
                         }}
-                        editable={false}
-                        value={transactionData.date}
-                        onChangeText={(e: any) =>
-                          setTransactionData({
-                            ...transactionData,
-                            date: e,
-                          })
-                        }
-                        onPressIn={toggleDatePicker}
-                      />
-                    </TouchableOpacity>
+                      >
+                        Aucune transaction
+                      </ThemedText>
+                    </View>
                   )}
-                </View>
-              </View>
+                />
+              )}
+            </View>
+            {/* Fin Liste des transactions */}
 
-              <View>
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Note
-                </ThemedText>
-                <TextInput
-                  multiline
-                  placeholder="Ajouter une note"
-                  placeholderTextColor={color}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: "gray",
-                    padding: 13,
-                    borderRadius: 10,
-                    color: color,
-                    marginTop: 8,
-                    textAlignVertical: "top",
-                    height: 100,
-                    fontFamily: FONT_FAMILY.regular,
-                  }}
-                  onChangeText={(e) =>
-                    setTransactionData({ ...transactionData, note: e })
-                  }
-                />
-              </View>
-            </>
-          )}
+            {/* Mes xp */}
+            <View>
+              <GaugeHalfCircle
+                value={user?.xpIntoLevel ?? 0}
+                level={user?.level ?? 1}
+                max={user?.xpForNextLevel ?? 100}
+              />
+            </View>
+          </ScrollView>
+        </ThemedView>
 
-          {transactionData.type === "event" && (
-            <>
-              <View>
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Nom ou description de la charge
-                </ThemedText>
-                <TextInput
-                  placeholder="Ex: Loyer, électricité..."
-                  placeholderTextColor={
-                    color === "#FFFFFF" ? COLORS.gray : COLORS.dark
-                  }
+        <BottomSheet ref={ref}>
+          <ScrollView
+            ref={ScrollViewRef}
+            keyboardShouldPersistTaps="always"
+            showsVerticalScrollIndicator={true}
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              padding: 20,
+              gap: 20,
+              paddingBottom: 150,
+              // height: SCREEN_HEIGHT,
+              // backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+              zIndex: 999,
+              width: "100%",
+              // flex: 1,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                backgroundColor: COLORS.secondary,
+                // padding: 10,
+                borderRadius: 50,
+                alignItems: "center",
+              }}
+            >
+              {OPTIONS.map((opt: any) => (
+                <AnimatedPressable
+                  layout={LinearTransition.springify().mass(0.5)}
+                  key={opt.key}
                   style={{
-                    borderWidth: 1,
-                    borderColor: "gray",
-                    padding: 13,
-                    borderRadius: 10,
-                    color: color,
-                    marginTop: 8,
-                    textAlignVertical: "top",
-                    fontFamily: FONT_FAMILY.regular,
+                    alignItems: "center",
+                    padding: 12,
+                    borderRadius: 25,
+                    backgroundColor:
+                      option === opt.key ? COLORS.dark : "transparent",
                   }}
-                  value={transactionData.name}
-                  onChangeText={(e) =>
-                    setTransactionData({ ...transactionData, name: e })
-                  }
-                />
-              </View>
-              <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Catégorie
-                </ThemedText>
-                <SelectList
-                  data={categories}
-                  key={keyReset}
-                  setSelected={(val: string) =>
-                    setTransactionData({
-                      ...transactionData,
-                      category_id: parseInt(val),
-                    })
-                  }
-                  placeholder="Choisir une catégorie"
-                  inputStyles={{ color: color }}
-                  searchPlaceholder="Entrez une catégorie"
-                  dropdownTextStyles={{ color: color }}
-                  closeicon={<Ionicons name="close" size={18} color={color} />}
-                  searchicon={
-                    <Ionicons name="search" size={18} color={color} />
-                  }
-                  arrowicon={
-                    <Feather name="chevron-down" size={24} color={color} />
-                  }
-                  save="key"
-                />
-              </View>
-              <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Fréquence (chaque :)
-                </ThemedText>
+                  onPress={() => handleTypeChange(opt.key)}
+                >
+                  <Animated.Text
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(200)}
+                    style={{
+                      fontFamily:
+                        option === opt.key
+                          ? FONT_FAMILY.semibold
+                          : FONT_FAMILY.regular,
+                      color: option === opt.key ? COLORS.white : COLORS.dark,
+                    }}
+                  >
+                    {opt.label}
+                  </Animated.Text>
+                </AnimatedPressable>
+              ))}
+            </View>
+
+            <View
+              style={{
+                gap: 8,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
+                Montant (CFA)
+              </ThemedText>
+              <TextInput
+                placeholder="0"
+                keyboardType="numeric"
+                style={{
+                  fontFamily: FONT_FAMILY.bold,
+                  fontSize: 24,
+                  width: "100%",
+                  color: color,
+                  textAlign: "center",
+                }}
+                placeholderTextColor={color}
+                onChangeText={(e) =>
+                  setTransactionData({
+                    ...transactionData,
+                    amount: e,
+                  })
+                }
+                value={transactionData.amount}
+              />
+            </View>
+
+            {transactionData.type !== "event" && (
+              <>
                 <View
                   style={{
                     flexDirection: "row",
-                    // gap: 12,
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    width: "100%",
+                    // width: "100%",
+                    justifyContent: "center",
+                    gap: 12,
                   }}
                 >
-                  <TextInput
-                    keyboardType="numeric"
-                    placeholder="1"
-                    placeholderTextColor={color}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: "gray",
-                      padding: 13,
-                      borderRadius: 10,
-                      color: color,
-                      width: 60,
-                      textAlign: "center",
-                      fontFamily: FONT_FAMILY.regular,
-                    }}
-                    maxLength={3}
-                    onChangeText={(e) =>
-                      setTransactionData({
-                        ...transactionData,
-                        interval_count: e,
-                      })
-                    }
-                    value={transactionData.interval_count.toString()}
-                  />
-
                   <SelectList
-                    data={FREQUENCIES.map((f) => ({
-                      key: f.key,
-                      value: f.value,
-                    }))}
+                    data={categories}
                     key={keyReset}
                     setSelected={(val: string) =>
                       setTransactionData({
                         ...transactionData,
-                        frequency: val as Frequency,
+                        category_id: parseInt(val),
                       })
                     }
-                    placeholder="Choisir une fréquence"
+                    placeholder="Choisir une catégorie"
                     inputStyles={{
                       color: color,
-                      width: "90%",
                       fontFamily: FONT_FAMILY.regular,
                     }}
-                    boxStyles={{
-                      width: "80%",
-                    }}
-                    searchPlaceholder="Entrez une fréquence"
+                    searchPlaceholder="Entrez une catégorie"
                     dropdownTextStyles={{
                       color: color,
                       fontFamily: FONT_FAMILY.regular,
@@ -1417,194 +1267,444 @@ export default function HomeScreen() {
                     }
                     save="key"
                   />
-                </View>
-              </View>
-              <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Date de paiement
-                </ThemedText>
-                <View
-                  style={{
-                    // flexDirection: "row",
-                    // alignItems: "center",
-                    width: "100%",
-                    gap: 8,
-                    // justifyContent: "space-between",
-                  }}
-                >
-                  {open && (
-                    <DateTimePicker
-                      mode="date"
-                      display="spinner"
-                      value={date}
-                      onChange={onChange}
-                      style={{
-                        height: 120,
-                        marginTop: 20,
-                        width: "100%",
-                      }}
-                      textColor="#000"
-                    />
-                  )}
 
-                  {open && Platform.OS === "ios" && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-around",
-                        marginBottom: 20,
-                      }}
-                    >
-                      <TouchableOpacity
+                  <View
+                    style={
+                      {
+                        // flexDirection: "row",
+                        // alignItems: "center",
+                        // width: "70%",
+                        // justifyContent: "space-between",
+                      }
+                    }
+                  >
+                    {open && (
+                      <DateTimePicker
+                        mode="date"
+                        display="spinner"
+                        value={date}
+                        onChange={onChange}
                         style={{
-                          padding: 10,
-                          backgroundColor: "gray",
-                          borderRadius: 10,
-                        }}
-                        onPress={toggleDatePicker}
-                      >
-                        <Text style={{ color: "black", fontWeight: "bold" }}>
-                          Annuler
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={{
-                          padding: 10,
-                          backgroundColor: "gray",
-                          borderRadius: 10,
-                        }}
-                        onPress={confirmIOSDate}
-                      >
-                        <Text style={{ color: "black", fontWeight: "bold" }}>
-                          Valider
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  {!open && (
-                    <TouchableOpacity onPress={toggleDatePicker}>
-                      <TextInput
-                        placeholder="Date debut"
-                        placeholderTextColor="#000"
-                        style={{
-                          borderWidth: 1,
-                          borderColor: "gray",
-                          padding: 10,
-                          borderRadius: 10,
-                          color: color,
-                          fontFamily: FONT_FAMILY.regular,
-                          height: 52,
+                          height: 120,
+                          marginTop: 20,
                           width: "100%",
                         }}
-                        editable={false}
-                        value={transactionData.date}
-                        onChangeText={(e: any) =>
-                          setTransactionData({
-                            ...transactionData,
-                            date: e,
-                          })
-                        }
-                        onPressIn={toggleDatePicker}
+                        textColor="#000"
                       />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-              <View style={{ gap: 8 }}>
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Rappel
-                </ThemedText>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 12 }}
-                >
-                  {REMIND_PRESETS.map((preset) => (
-                    <TouchableOpacity
-                      key={preset}
-                      style={{
-                        padding: 10,
-                        backgroundColor:
-                          transactionData.remind_days_before === preset
-                            ? COLORS.primary
-                            : COLORS.secondary,
-                        borderRadius: 10,
-                      }}
-                      onPress={() =>
-                        setTransactionData({
-                          ...transactionData,
-                          remind_days_before: preset,
-                        })
-                      }
-                    >
-                      <ThemedText
+                    )}
+
+                    {open && Platform.OS === "ios" && (
+                      <View
                         style={{
-                          color:
-                            transactionData.remind_days_before === preset
-                              ? COLORS.white
-                              : COLORS.noir,
-                          fontFamily: FONT_FAMILY.regular,
+                          flexDirection: "row",
+                          justifyContent: "space-around",
+                          marginBottom: 20,
                         }}
                       >
-                        {preset === 0 ? "Jour J" : `J-${preset}`}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View
+                        <TouchableOpacity
+                          style={{
+                            padding: 10,
+                            backgroundColor: "gray",
+                            borderRadius: 10,
+                          }}
+                          onPress={toggleDatePicker}
+                        >
+                          <Text style={{ color: "black", fontWeight: "bold" }}>
+                            Annuler
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{
+                            padding: 10,
+                            backgroundColor: "gray",
+                            borderRadius: 10,
+                          }}
+                          onPress={confirmIOSDate}
+                        >
+                          <Text style={{ color: "black", fontWeight: "bold" }}>
+                            Valider
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {!open && (
+                      <TouchableOpacity onPress={toggleDatePicker}>
+                        <TextInput
+                          placeholder="Date debut"
+                          placeholderTextColor="#000"
+                          style={{
+                            borderWidth: 1,
+                            borderColor: "gray",
+                            padding: 10,
+                            borderRadius: 10,
+                            color: color,
+                            height: 52,
+                            width: 145,
+                          }}
+                          editable={false}
+                          value={transactionData.date}
+                          onChangeText={(e: any) =>
+                            setTransactionData({
+                              ...transactionData,
+                              date: e,
+                            })
+                          }
+                          onPressIn={toggleDatePicker}
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                <View>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Note
+                  </ThemedText>
+                  <TextInput
+                    multiline
+                    placeholder="Ajouter une note"
+                    placeholderTextColor={color}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "gray",
+                      padding: 13,
+                      borderRadius: 10,
+                      color: color,
+                      marginTop: 8,
+                      textAlignVertical: "top",
+                      height: 100,
+                      fontFamily: FONT_FAMILY.regular,
+                    }}
+                    value={transactionData.note}
+                    onChangeText={(e) =>
+                      setTransactionData({ ...transactionData, note: e })
+                    }
+                  />
+                </View>
+              </>
+            )}
+
+            {transactionData.type === "event" && (
+              <>
+                <View>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Nom ou description de la charge
+                  </ThemedText>
+                  <TextInput
+                    placeholder="Ex: Loyer, électricité..."
+                    placeholderTextColor={
+                      color === "#FFFFFF" ? COLORS.gray : COLORS.dark
+                    }
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "gray",
+                      padding: 13,
+                      borderRadius: 10,
+                      color: color,
+                      marginTop: 8,
+                      textAlignVertical: "top",
+                      fontFamily: FONT_FAMILY.regular,
+                    }}
+                    value={transactionData.name}
+                    onChangeText={(e) =>
+                      setTransactionData({ ...transactionData, name: e })
+                    }
+                  />
+                </View>
+                <View style={{ gap: 8 }}>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Catégorie
+                  </ThemedText>
+                  <SelectList
+                    data={categories}
+                    key={keyReset}
+                    setSelected={(val: string) =>
+                      setTransactionData({
+                        ...transactionData,
+                        category_id: parseInt(val),
+                      })
+                    }
+                    placeholder="Choisir une catégorie"
+                    inputStyles={{ color: color }}
+                    searchPlaceholder="Entrez une catégorie"
+                    dropdownTextStyles={{ color: color }}
+                    closeicon={
+                      <Ionicons name="close" size={18} color={color} />
+                    }
+                    searchicon={
+                      <Ionicons name="search" size={18} color={color} />
+                    }
+                    arrowicon={
+                      <Feather name="chevron-down" size={24} color={color} />
+                    }
+                    save="key"
+                  />
+                </View>
+                <View style={{ gap: 8 }}>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Fréquence (chaque :)
+                  </ThemedText>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      // gap: 12,
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%",
+                    }}
+                  >
+                    <TextInput
+                      keyboardType="numeric"
+                      placeholder="1"
+                      placeholderTextColor={color}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: "gray",
+                        padding: 13,
+                        borderRadius: 10,
+                        color: color,
+                        width: 60,
+                        textAlign: "center",
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      maxLength={3}
+                      onChangeText={(e) =>
+                        setTransactionData({
+                          ...transactionData,
+                          interval_count: e,
+                        })
+                      }
+                      value={transactionData.interval_count.toString()}
+                    />
+
+                    <SelectList
+                      data={FREQUENCIES.map((f) => ({
+                        key: f.key,
+                        value: f.value,
+                      }))}
+                      key={keyReset}
+                      setSelected={(val: string) =>
+                        setTransactionData({
+                          ...transactionData,
+                          frequency: val as Frequency,
+                        })
+                      }
+                      placeholder="Choisir une fréquence"
+                      inputStyles={{
+                        color: color,
+                        width: "90%",
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      boxStyles={{
+                        width: "80%",
+                      }}
+                      searchPlaceholder="Entrez une fréquence"
+                      dropdownTextStyles={{
+                        color: color,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      closeicon={
+                        <Ionicons name="close" size={18} color={color} />
+                      }
+                      searchicon={
+                        <Ionicons name="search" size={18} color={color} />
+                      }
+                      arrowicon={
+                        <Feather name="chevron-down" size={24} color={color} />
+                      }
+                      save="key"
+                    />
+                  </View>
+                </View>
+                <View style={{ gap: 8 }}>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Date de paiement
+                  </ThemedText>
+                  <View
+                    style={{
+                      // flexDirection: "row",
+                      // alignItems: "center",
+                      width: "100%",
+                      gap: 8,
+                      // justifyContent: "space-between",
+                    }}
+                  >
+                    {open && (
+                      <DateTimePicker
+                        mode="date"
+                        display="spinner"
+                        value={date}
+                        onChange={onChange}
+                        style={{
+                          height: 120,
+                          marginTop: 20,
+                          width: "100%",
+                        }}
+                        textColor="#000"
+                      />
+                    )}
+
+                    {open && Platform.OS === "ios" && (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-around",
+                          marginBottom: 20,
+                        }}
+                      >
+                        <TouchableOpacity
+                          style={{
+                            padding: 10,
+                            backgroundColor: "gray",
+                            borderRadius: 10,
+                          }}
+                          onPress={toggleDatePicker}
+                        >
+                          <Text style={{ color: "black", fontWeight: "bold" }}>
+                            Annuler
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{
+                            padding: 10,
+                            backgroundColor: "gray",
+                            borderRadius: 10,
+                          }}
+                          onPress={confirmIOSDate}
+                        >
+                          <Text style={{ color: "black", fontWeight: "bold" }}>
+                            Valider
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {!open && (
+                      <TouchableOpacity onPress={toggleDatePicker}>
+                        <TextInput
+                          placeholder="Date debut"
+                          placeholderTextColor="#000"
+                          style={{
+                            borderWidth: 1,
+                            borderColor: "gray",
+                            padding: 10,
+                            borderRadius: 10,
+                            color: color,
+                            fontFamily: FONT_FAMILY.regular,
+                            height: 52,
+                            width: "100%",
+                          }}
+                          editable={false}
+                          value={transactionData.date}
+                          onChangeText={(e: any) =>
+                            setTransactionData({
+                              ...transactionData,
+                              date: e,
+                            })
+                          }
+                          onPressIn={toggleDatePicker}
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+                <View style={{ gap: 8 }}>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Rappel
+                  </ThemedText>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 12 }}
+                  >
+                    {REMIND_PRESETS.map((preset) => (
+                      <TouchableOpacity
+                        key={preset}
+                        style={{
+                          padding: 10,
+                          backgroundColor:
+                            transactionData.remind_days_before === preset
+                              ? COLORS.primary
+                              : COLORS.secondary,
+                          borderRadius: 10,
+                        }}
+                        onPress={() =>
+                          setTransactionData({
+                            ...transactionData,
+                            remind_days_before: preset,
+                          })
+                        }
+                      >
+                        <ThemedText
+                          style={{
+                            color:
+                              transactionData.remind_days_before === preset
+                                ? COLORS.white
+                                : COLORS.noir,
+                            fontFamily: FONT_FAMILY.regular,
+                          }}
+                        >
+                          {preset === 0 ? "Jour J" : `J-${preset}`}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                <View
+                  style={{
+                    gap: 8,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                    Actif
+                  </ThemedText>
+                  <Switch
+                    trackColor={{ false: COLORS.gray, true: COLORS.gray }}
+                    thumbColor={
+                      transactionData.active ? COLORS.green : COLORS.secondary
+                    }
+                    style={{ transform: [{ scaleX: 1 }, { scaleY: 1 }] }}
+                    onValueChange={toggleSwitch}
+                    value={transactionData.active === 1}
+                  />
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={{
+                padding: 15,
+                alignItems: "center",
+                backgroundColor: COLORS.primary,
+                borderRadius: 25,
+                opacity: loading ? 0.7 : 1,
+              }}
+              onPress={handleSave}
+              disabled={loading}
+            >
+              <Text
                 style={{
-                  gap: 8,
+                  color: COLORS.white,
+                  fontFamily: FONT_FAMILY.bold,
                   flexDirection: "row",
                   alignItems: "center",
-                  justifyContent: "space-between",
+                  gap: 8,
                 }}
               >
-                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                  Actif
-                </ThemedText>
-                <Switch
-                  trackColor={{ false: COLORS.gray, true: COLORS.gray }}
-                  thumbColor={
-                    transactionData.active ? COLORS.green : COLORS.secondary
-                  }
-                  style={{ transform: [{ scaleX: 1 }, { scaleY: 1 }] }}
-                  onValueChange={toggleSwitch}
-                  value={transactionData.active === 1}
-                />
-              </View>
-            </>
-          )}
-
-          <TouchableOpacity
-            style={{
-              padding: 15,
-              alignItems: "center",
-              backgroundColor: COLORS.primary,
-              borderRadius: 25,
-              opacity: loading ? 0.7 : 1,
-            }}
-            onPress={handleSave}
-            disabled={loading}
-          >
-            <Text
-              style={{
-                color: COLORS.white,
-                fontFamily: FONT_FAMILY.bold,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              Enregistrer la transaction
-              {loading && <ActivityIndicator color={COLORS.white} />}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </BottomSheet>
-    </SafeAreaView>
+                Enregistrer la transaction
+                {loading && <ActivityIndicator color={COLORS.white} />}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </BottomSheet>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 

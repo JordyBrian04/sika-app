@@ -10,7 +10,7 @@ import {
 } from "@/src/db/repositories/category";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
-import { color } from "@/src/utils/colos";
+import { useAppTextColor } from "@/src/utils/colos";
 import {
   AntDesign,
   Feather,
@@ -44,6 +44,7 @@ const TYPE_DATA = [
 ];
 
 export default function Categories() {
+  const color = useAppTextColor();
   const [loading, setLoading] = React.useState(false);
   const [loading2, setLoading2] = React.useState(false);
   const [categories, setCategories] = React.useState<CategoryInput[]>([]);

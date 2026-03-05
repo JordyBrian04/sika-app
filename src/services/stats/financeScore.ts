@@ -205,7 +205,7 @@ export async function getFinanceScore(options?: {
   // 3) Budget control (0..100)
   // ---------------------------
   // si pas de budgets -> score moyen bas (incite à en créer)
-  let budgetControl = 45;
+  let budgetControl = 0;
   if (budget.budgetsCount > 0) {
     // pénalité dépassements / proches
     const overPenalty = budget.budgetsOverCount * 18; // chaque dépassement coûte cher
@@ -219,7 +219,7 @@ export async function getFinanceScore(options?: {
   // net positif = capacité à épargner
   // netPerDay relatif => si tu gagnes +1000/jour, c'est bien.
   // si net <= 0 => score faible
-  let savingPower = 15;
+  let savingPower = 0;
   if (net > 0) {
     // on scale netPerDay: 0..5000 => 0..100 (cap)
     savingPower = round(clamp((netPerDay / 5000) * 100, 0, 100));

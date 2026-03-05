@@ -25,6 +25,23 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
   const { buildHref } = useLinkBuilder();
   const colorScheme = useColorScheme();
 
+  function getIcon(routeName: string, color: string) {
+    switch (routeName) {
+      case "index":
+        return <Feather name="home" size={24} color={color} />;
+      case "budgets":
+        return (
+          <FontAwesome6 name="money-bill-trend-up" size={24} color={color} />
+        );
+      case "stats":
+        return <FontAwesome6 name="chart-pie" size={24} color={color} />;
+      case "epargne":
+        return <FontAwesome6 name="piggy-bank" size={24} color={color} />;
+      case "settings":
+        return <Feather name="settings" size={24} color={color} />;
+    }
+  }
+
   return (
     <View
       style={{
@@ -128,27 +145,6 @@ const CustomNavBar: React.FC<BottomTabBarProps> = ({
             )}
           </AnimatedPressable>
         );
-
-        function getIcon(routeName: string, color: string) {
-          switch (routeName) {
-            case "index":
-              return <Feather name="home" size={24} color={color} />;
-            case "budgets":
-              return (
-                <FontAwesome6
-                  name="money-bill-trend-up"
-                  size={24}
-                  color={color}
-                />
-              );
-            case "stats":
-              return <FontAwesome6 name="chart-pie" size={24} color={color} />;
-            case "epargne":
-              return <FontAwesome6 name="piggy-bank" size={24} color={color} />;
-            case "settings":
-              return <Feather name="settings" size={24} color={color} />;
-          }
-        }
       })}
     </View>
   );

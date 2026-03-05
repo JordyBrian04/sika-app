@@ -30,6 +30,7 @@ export function SliderItem({ item, isActive }: any) {
           backgroundColor: COLORS.green + "10",
           flexDirection: "row",
           gap: 20,
+          // marginRight: 20,
         },
       ]}
     >
@@ -138,6 +139,19 @@ export function SliderItem({ item, isActive }: any) {
           </View>
         </View>
       </View>
+
+      <Image
+        source={require("../../assets/images/sparkler.png")}
+        style={{
+          width: 150,
+          height: 150,
+          position: "absolute",
+          bottom: 0,
+          right: 0,
+          zIndex: -1,
+        }}
+        tintColor={COLORS.green + "20"}
+      />
     </View>
   );
 }

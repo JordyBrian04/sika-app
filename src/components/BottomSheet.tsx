@@ -37,6 +37,7 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
     const context = useSharedValue({ y: 0 });
     // const MAX_TRANSLATE_Y = SCREEN_HEIGHT * 0.15;
     const active = useSharedValue(false);
+    const activeJS = React.useRef(false);
     const handleScale = useSharedValue(1);
 
     const keyboardHeight = useSharedValue(0);
@@ -48,13 +49,19 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
 
           // On ajuste la position actuelle pour remonter de la taille du clavier
           // Note: On utilise withTiming ou withSpring pour la fluidité
-          translateY.value = withSpring(
+          // translateY.value = withSpring(
+          //   -SCREEN_HEIGHT / 1.5 - e.endCoordinates.height,
+          //   {
+          //     damping: 20,
+          //     stiffness: 90,
+          //   },
+          // );
+          const dest = Math.max(
             -SCREEN_HEIGHT / 1.5 - e.endCoordinates.height,
-            {
-              damping: 20,
-              stiffness: 90,
-            },
+            MAX_TRANSLATE_Y,
           );
+
+          translateY.value = withSpring(dest, { damping: 20, stiffness: 90 });
         }
       });
 
@@ -75,7 +82,6 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
     const scrollTo = (destination: number) => {
       // console.log("destination", destination);
       "worklet";
-      const finalDestination = destination === 0 ? 100 : destination;
       // active.value = destination !== 0;
       active.value = destination < SCREEN_HEIGHT;
       translateY.value = withSpring(destination, {
@@ -84,14 +90,17 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
       });
     };
 
-    const isActive = React.useCallback(() => {
-      "worklet";
-      return active.value;
-    }, []);
-
     const scrollToJS = React.useCallback((destination: number) => {
+      activeJS.current = destination < SCREEN_HEIGHT;
       runOnUI(scrollTo)(destination);
     }, []);
+
+    //   const isActive = React.useCallback(() => {
+    //   "worklet";
+    //   return active.value;
+    // }, []);
+
+    const isActive = React.useCallback(() => activeJS.current, []);
 
     // React.useImperativeHandle(ref, () => ({ scrollTo, isActive }), [
     //   scrollTo,

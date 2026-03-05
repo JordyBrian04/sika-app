@@ -4,7 +4,10 @@ import { computeNextDate } from "../utils/date";
 import { scheduleRecurringNotifications } from "./recurringNotifications";
 
 // IMPORTANT : ton type transaction est 'depense'|'entree'
-async function insertTransactionFromRecurring(recurringId: number) {
+export async function insertTransactionFromRecurring(
+  recurringId: number,
+  date?: string,
+) {
   const r = await getOne<{
     id: number;
     name: string;
@@ -26,7 +29,7 @@ async function insertTransactionFromRecurring(recurringId: number) {
     [
       r.amount,
       r.category_id ?? null,
-      r.next_date,
+      date ?? r.next_date,
       `Paiement ${r.frequency}: ${r.name}`,
       r.id,
     ],
@@ -35,7 +38,7 @@ async function insertTransactionFromRecurring(recurringId: number) {
   return r;
 }
 
-async function advanceRecurring(r: {
+export async function advanceRecurring(r: {
   id: number;
   name: string;
   amount: number;

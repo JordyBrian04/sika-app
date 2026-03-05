@@ -72,7 +72,7 @@ export default function ExpenseCalendar60Days({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 14 }}>
+        <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 12 }}>
           {title}
         </ThemedText>
         <ThemedText style={{ fontFamily: FONT_FAMILY.medium, fontSize: 12 }}>

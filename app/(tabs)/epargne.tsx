@@ -3,6 +3,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
+import { listeCategories } from "@/src/db/repositories/category";
+import { addTransaction } from "@/src/db/repositories/transactions";
 import { addContribution } from "@/src/services/goals/contributions";
 import {
   createGoal,
@@ -13,9 +15,9 @@ import { getGoalPlan } from "@/src/services/goals/planner";
 import { autoCheckNoSpendDay } from "@/src/services/missions/noSpendDay";
 import { ensureWeeklyPackAI } from "@/src/services/missions/weeklyAI";
 import { FONT_FAMILY } from "@/src/theme/fonts";
-import { color } from "@/src/utils/colos";
+import { useAppTextColor } from "@/src/utils/colos";
 import { formatMoney } from "@/src/utils/format";
-import { diffDays } from "@/src/utils/goalDates";
+import { diffDays, toYYYYMMDD } from "@/src/utils/goalDates";
 import {
   Feather,
   FontAwesome6,
@@ -54,7 +56,8 @@ const formatNumberWithCommas = (num: number) => {
 // console.log("w", width / 12, "h", height / 12, "R", R / 2);
 
 export default function TabFourScreen() {
-  const [weeklyMissions, setWeeklyMissions] = React.useState<any>([]);
+  const color = useAppTextColor();
+  const [weeklyMissions, setWeeklyMissions] = React.useState<any>(null);
   const [weeklyBoosts, setWeeklyBoosts] = React.useState<any[]>([]);
   const [goals, setGoals] = React.useState<any[]>([]);
   const [selectedGoals, setSelectedGoals] = React.useState<any | null>(null);
@@ -253,13 +256,22 @@ export default function TabFourScreen() {
   };
 
   useFocusEffect(
-    React.useCallback(() => {
-      getDatas();
+    useCallback(() => {
+      let active = true;
 
       (async () => {
-        const minWeekly = await getMinWeekly();
-        await autoCheckNoSpendDay(minWeekly);
+        try {
+          await getDatas();
+          const minWeekly = await getMinWeekly();
+          if (active) await autoCheckNoSpendDay(minWeekly);
+        } catch (e) {
+          console.log(e);
+        }
       })();
+
+      return () => {
+        active = false;
+      };
     }, []),
   );
 
@@ -403,6 +415,18 @@ export default function TabFourScreen() {
         source: "manual",
       });
 
+      const cat = await listeCategories();
+
+      await addTransaction({
+        amount: parseInt(contribution.amount),
+        type: "depense",
+        date: toYYYYMMDD(new Date()),
+        note: `Contribution sur l'épargne : ${selectedGoals.name}`,
+        category_id: cat.find(
+          (c) => c.name.toLowerCase().includes("autre") && c.type === "depense",
+        )?.id,
+      });
+
       toggleSheet();
       setContribution({
         amount: "0",
@@ -420,9 +444,31 @@ export default function TabFourScreen() {
     }
   };
 
+  const isReady = !loading;
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ThemedView style={{ flex: 1 }} lightColor={COLORS.secondary}>
+        {(loading || !isReady) && (
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <ThemedText
+              style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 18 }}
+            >
+              Chargement...
+            </ThemedText>
+          </View>
+        )}
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           nestedScrollEnabled
@@ -432,388 +478,409 @@ export default function TabFourScreen() {
             <RefreshControl onRefresh={getDatas} refreshing={loading} />
           }
         >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: FONT_FAMILY.bold,
-                fontSize: 30,
-                color: color,
-                flexWrap: "wrap",
-              }}
-            >
-              Epargnes
-            </Text>
-
-            <TouchableOpacity
-              onPress={() => {
-                setInputShown("add_goal");
-                toggleSheet();
-              }}
-            >
-              <Feather name="plus-circle" size={40} color={color} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Mission */}
-          {goals && goals.length > 0 && (
-            <View
-              style={{
-                backgroundColor:
-                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                padding: 12,
-                borderRadius: 15,
-                gap: 8,
-              }}
-            >
-              <View>
-                <ThemedText
-                  style={{ fontFamily: FONT_FAMILY.bold, fontSize: 20 }}
-                >
-                  Missions de la semaine
-                </ThemedText>
+          {!isReady ? (
+            <View style={{ height: 400 }} />
+          ) : (
+            <>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Text
-                  style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray }}
-                >
-                  Gagne des bonus en restant discipliné
-                </Text>
-              </View>
-
-              <View>
-                {weeklyMissions && (
-                  <View
-                    style={{
-                      backgroundColor: COLORS.gray + "30",
-                      padding: 10,
-                      borderRadius: 14,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      width: "100%",
-                    }}
-                  >
-                    {weeklyMissions.status === "done" ? (
-                      <Feather
-                        name="check-circle"
-                        size={24}
-                        color={COLORS.green}
-                      />
-                    ) : (
-                      <View
-                        style={{
-                          borderWidth: 1,
-                          borderColor: COLORS.gray,
-                          padding: 10,
-                          width: 20,
-                          height: 20,
-                          borderRadius: 100,
-                        }}
-                      />
-                    )}
-
-                    <View style={{ flex: 1 }}>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <ThemedText
-                          style={{
-                            fontFamily: FONT_FAMILY.semibold,
-                            fontSize: 15,
-                          }}
-                        >
-                          {weeklyMissions.title}
-                        </ThemedText>
-                        <View
-                          style={{
-                            backgroundColor: COLORS.green,
-                            padding: 5,
-                            borderRadius: 14,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            alignSelf: "flex-start",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: COLORS.white,
-                              fontSize: 12,
-                              fontFamily: FONT_FAMILY.medium,
-                            }}
-                          >
-                            +{weeklyMissions.reward_xp} XP
-                          </Text>
-                        </View>
-                      </View>
-                      <Text
-                        style={{
-                          fontFamily: FONT_FAMILY.medium,
-                          color: COLORS.gray,
-                          fontSize: 13,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        {weeklyMissions.description}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              <View style={{ gap: 8 }}>
-                {weeklyBoosts &&
-                  weeklyBoosts.length > 0 &&
-                  weeklyBoosts.map((b) => (
-                    <View
-                      key={b.id}
-                      style={{
-                        backgroundColor: COLORS.gray + "30",
-                        padding: 10,
-                        borderRadius: 14,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        width: "100%",
-                      }}
-                    >
-                      {b.status === "done" ? (
-                        <Feather
-                          name="check-circle"
-                          size={24}
-                          color={COLORS.green}
-                        />
-                      ) : (
-                        <View
-                          style={{
-                            borderWidth: 1,
-                            borderColor: COLORS.gray,
-                            padding: 10,
-                            width: 20,
-                            height: 20,
-                            borderRadius: 100,
-                          }}
-                        />
-                      )}
-
-                      <View style={{ flex: 1 }}>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <ThemedText
-                            style={{
-                              fontFamily: FONT_FAMILY.semibold,
-                              fontSize: 15,
-                            }}
-                          >
-                            {b.title}
-                          </ThemedText>
-                          <View
-                            style={{
-                              backgroundColor: COLORS.green,
-                              padding: 5,
-                              borderRadius: 14,
-                              alignItems: "center",
-                              justifyContent: "center",
-                              alignSelf: "flex-start",
-                            }}
-                          >
-                            <Text
-                              style={{
-                                color: COLORS.white,
-                                fontSize: 12,
-                                fontFamily: FONT_FAMILY.medium,
-                              }}
-                            >
-                              +{b.reward_xp} XP
-                            </Text>
-                          </View>
-                        </View>
-                        <Text
-                          style={{
-                            fontFamily: FONT_FAMILY.medium,
-                            color: COLORS.gray,
-                            fontSize: 13,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          {b.description}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-              </View>
-            </View>
-          )}
-
-          {/* Liste épargnes */}
-          <View>
-            <FlatList
-              data={goals}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  key={item.id}
                   style={{
-                    gap: 18,
+                    fontFamily: FONT_FAMILY.bold,
+                    fontSize: 30,
+                    color: color,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  Epargnes
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setInputShown("add_goal");
+                    toggleSheet();
+                  }}
+                >
+                  <Feather name="plus-circle" size={40} color={color} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Mission */}
+              {goals && goals.length > 0 && (
+                <View
+                  style={{
                     backgroundColor:
                       color === "#FFFFFF" ? COLORS.dark : COLORS.white,
                     padding: 12,
                     borderRadius: 15,
+                    gap: 8,
                   }}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/(screens)/DetailGoal",
-                      params: { id: item.id },
-                    })
-                  }
                 >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <View style={{}}>
-                      <CircularProgressBar
-                        radius={R}
-                        strokeWidth={STROKE_WIDTH}
-                        percentage={item.percentage}
-                        end={item.percentage / 100}
-                      />
-                    </View>
+                  <View>
+                    <ThemedText
+                      style={{ fontFamily: FONT_FAMILY.bold, fontSize: 20 }}
+                    >
+                      Missions de la semaine
+                    </ThemedText>
+                    <Text
+                      style={{
+                        fontFamily: FONT_FAMILY.medium,
+                        color: COLORS.gray,
+                      }}
+                    >
+                      Gagne des bonus en restant discipliné
+                    </Text>
+                  </View>
 
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <ThemedText
-                        style={{ fontFamily: FONT_FAMILY.bold, fontSize: 18 }}
-                      >
-                        {item.name}
-                      </ThemedText>
-                      <Text
+                  <View>
+                    {weeklyMissions !== null && (
+                      <View
                         style={{
-                          fontFamily: FONT_FAMILY.medium,
-                          color: COLORS.gray,
-                          fontSize: 12,
+                          backgroundColor: COLORS.gray + "30",
+                          padding: 10,
+                          borderRadius: 14,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          width: "100%",
                         }}
                       >
-                        Reste {formatMoney(item.details.remaining_amount)} CFA
-                        sur {formatMoney(item.target_amount)} CFA
-                      </Text>
+                        {weeklyMissions.status === "done" ? (
+                          <Feather
+                            name="check-circle"
+                            size={24}
+                            color={COLORS.green}
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              borderWidth: 1,
+                              borderColor: COLORS.gray,
+                              padding: 10,
+                              width: 20,
+                              height: 20,
+                              borderRadius: 100,
+                            }}
+                          />
+                        )}
+
+                        <View style={{ flex: 1 }}>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <ThemedText
+                              style={{
+                                fontFamily: FONT_FAMILY.semibold,
+                                fontSize: 15,
+                              }}
+                            >
+                              {weeklyMissions.title}
+                            </ThemedText>
+                            <View
+                              style={{
+                                backgroundColor: COLORS.green,
+                                padding: 5,
+                                borderRadius: 14,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                alignSelf: "flex-start",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: COLORS.white,
+                                  fontSize: 12,
+                                  fontFamily: FONT_FAMILY.medium,
+                                }}
+                              >
+                                +{weeklyMissions.reward_xp} XP
+                              </Text>
+                            </View>
+                          </View>
+                          <Text
+                            style={{
+                              fontFamily: FONT_FAMILY.medium,
+                              color: COLORS.gray,
+                              fontSize: 13,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {weeklyMissions.description}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    {weeklyBoosts &&
+                      weeklyBoosts.length > 0 &&
+                      weeklyBoosts.map((b) => (
+                        <View
+                          key={b.id}
+                          style={{
+                            backgroundColor: COLORS.gray + "30",
+                            padding: 10,
+                            borderRadius: 14,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            width: "100%",
+                          }}
+                        >
+                          {b.status === "done" ? (
+                            <Feather
+                              name="check-circle"
+                              size={24}
+                              color={COLORS.green}
+                            />
+                          ) : (
+                            <View
+                              style={{
+                                borderWidth: 1,
+                                borderColor: COLORS.gray,
+                                padding: 10,
+                                width: 20,
+                                height: 20,
+                                borderRadius: 100,
+                              }}
+                            />
+                          )}
+
+                          <View style={{ flex: 1 }}>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <ThemedText
+                                style={{
+                                  fontFamily: FONT_FAMILY.semibold,
+                                  fontSize: 15,
+                                }}
+                              >
+                                {b.title}
+                              </ThemedText>
+                              <View
+                                style={{
+                                  backgroundColor: COLORS.green,
+                                  padding: 5,
+                                  borderRadius: 14,
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  alignSelf: "flex-start",
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: COLORS.white,
+                                    fontSize: 12,
+                                    fontFamily: FONT_FAMILY.medium,
+                                  }}
+                                >
+                                  +{b.reward_xp} XP
+                                </Text>
+                              </View>
+                            </View>
+                            <Text
+                              style={{
+                                fontFamily: FONT_FAMILY.medium,
+                                color: COLORS.gray,
+                                fontSize: 13,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              {b.description}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Liste épargnes */}
+              <View>
+                <FlatList
+                  data={goals}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={{
+                        gap: 18,
+                        backgroundColor:
+                          color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                        padding: 12,
+                        borderRadius: 15,
+                      }}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/(screens)/DetailGoal",
+                          params: { id: item.id },
+                        })
+                      }
+                    >
                       <View
                         style={{
                           flexDirection: "row",
                           alignItems: "center",
-                          gap: 4,
+                          justifyContent: "space-between",
+                          gap: 12,
                         }}
                       >
-                        <Fontisto name="wallet" size={14} color={COLORS.gray} />
+                        <View style={{}}>
+                          <CircularProgressBar
+                            radius={R}
+                            strokeWidth={STROKE_WIDTH}
+                            percentage={item.percentage}
+                            end={item.percentage / 100}
+                          />
+                        </View>
+
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <ThemedText
+                            style={{
+                              fontFamily: FONT_FAMILY.bold,
+                              fontSize: 18,
+                            }}
+                          >
+                            {item.name}
+                          </ThemedText>
+                          <Text
+                            style={{
+                              fontFamily: FONT_FAMILY.medium,
+                              color: COLORS.gray,
+                              fontSize: 12,
+                            }}
+                          >
+                            Reste {formatMoney(item.details.remaining_amount)}{" "}
+                            CFA sur {formatMoney(item.target_amount)} CFA
+                          </Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <Fontisto
+                              name="wallet"
+                              size={14}
+                              color={COLORS.gray}
+                            />
+                            <Text
+                              style={{
+                                fontFamily: FONT_FAMILY.medium,
+                                color: COLORS.gray,
+                                fontSize: 12,
+                              }}
+                            >
+                              Echeance :{" "}
+                              {new Date(item.target_date).toLocaleDateString(
+                                "fr-FR",
+                                { month: "long", year: "numeric" },
+                              )}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: 12,
+                          backgroundColor: COLORS.green,
+                          borderRadius: 8,
+                          justifyContent: "center",
+                        }}
+                        onPress={() =>
+                          Alert.alert(
+                            "Epargner",
+                            "Epargner le montant défini ou un autre montant ?",
+                            [
+                              {
+                                text: "Montant défini",
+                                onPress: async () => {
+                                  await addContribution({
+                                    goal_id: item.id,
+                                    amount: item.min_weekly,
+                                    date: new Date()
+                                      .toISOString()
+                                      .substring(0, 10),
+                                    source: "manual",
+                                  });
+                                  getDatas();
+                                },
+                              },
+                              {
+                                text: "Autre montant",
+                                onPress: () => {
+                                  setSelectedGoals(item);
+                                  setInputShown("add_contribution");
+                                  toggleSheet();
+                                },
+                              },
+                            ],
+                          )
+                        }
+                      >
+                        <MaterialIcons name="savings" size={24} color="white" />
                         <Text
                           style={{
-                            fontFamily: FONT_FAMILY.medium,
-                            color: COLORS.gray,
-                            fontSize: 12,
+                            color: "white",
+                            fontFamily: FONT_FAMILY.semibold,
+                            fontSize: 16,
                           }}
                         >
-                          Echeance :{" "}
-                          {new Date(item.target_date).toLocaleDateString(
-                            "fr-FR",
-                            { month: "long", year: "numeric" },
-                          )}
+                          Epargner
                         </Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  )}
+                  scrollEnabled={false}
+                  contentContainerStyle={{ gap: 12 }}
+                  ListEmptyComponent={() => {
+                    return (
+                      <View
+                        style={{
+                          flex: 1,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <ThemedText
+                          style={{
+                            fontFamily: FONT_FAMILY.medium,
+                            fontSize: 16,
+                          }}
+                        >
+                          Aucune épargne définie
+                        </ThemedText>
                       </View>
-                    </View>
-                  </View>
-
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: 12,
-                      backgroundColor: COLORS.green,
-                      borderRadius: 8,
-                      justifyContent: "center",
-                    }}
-                    onPress={() =>
-                      Alert.alert(
-                        "Epargner",
-                        "Epargner le montant défini ou un autre montant ?",
-                        [
-                          {
-                            text: "Montant défini",
-                            onPress: async () => {
-                              await addContribution({
-                                goal_id: item.id,
-                                amount: item.min_weekly,
-                                date: new Date().toISOString().substring(0, 10),
-                                source: "manual",
-                              });
-                              getDatas();
-                            },
-                          },
-                          {
-                            text: "Autre montant",
-                            onPress: () => {
-                              setSelectedGoals(item);
-                              setInputShown("add_contribution");
-                              toggleSheet();
-                            },
-                          },
-                        ],
-                      )
-                    }
-                  >
-                    <MaterialIcons name="savings" size={24} color="white" />
-                    <Text
-                      style={{
-                        color: "white",
-                        fontFamily: FONT_FAMILY.semibold,
-                        fontSize: 16,
-                      }}
-                    >
-                      Epargner
-                    </Text>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              )}
-              scrollEnabled={false}
-              contentContainerStyle={{ gap: 12 }}
-              ListEmptyComponent={() => {
-                return (
-                  <View
-                    style={{
-                      flex: 1,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <ThemedText
-                      style={{ fontFamily: FONT_FAMILY.medium, fontSize: 16 }}
-                    >
-                      Aucune épargne définie
-                    </ThemedText>
-                  </View>
-                );
-              }}
-            />
-          </View>
+                    );
+                  }}
+                />
+              </View>
+            </>
+          )}
         </ScrollView>
       </ThemedView>
 

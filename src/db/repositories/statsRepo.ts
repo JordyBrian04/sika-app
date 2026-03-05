@@ -15,6 +15,19 @@ export async function dayWithMostExpense(from: string, to: string) {
   );
 }
 
+export async function dayWithMostIncome(from: string, to: string) {
+  // console.log("from", from, "to", to);
+  return getOne<{ day: string; total: number }>(
+    `SELECT date as day, SUM(amount) as total
+     FROM transactions
+     WHERE type = 'entree' AND date >= ? AND date <= ?
+     GROUP BY date
+     ORDER BY total DESC
+     LIMIT 1`,
+    [from, to],
+  );
+}
+
 export async function dayWithLeastExpense(from: string, to: string) {
   return getOne<{ day: string; total: number }>(
     `SELECT date as day, SUM(amount) as total
@@ -322,7 +335,7 @@ export async function getTransactionsByPeriodAndCategory(
 ) {
   let result: any;
   const categories = await all<CategoryInput>(
-    `SELECT id, name FROM categories WHERE type='depense'`,
+    `SELECT id, name FROM categories WHERE type='depense' ORDER BY name ASC`,
   );
   const pieDatas: any = [];
   let maxPercent = -1;
@@ -337,6 +350,8 @@ export async function getTransactionsByPeriodAndCategory(
           value: 0,
           color: generateRandomColor(),
           gradientCenterColor: generateRandomColor(),
+          focused: false,
+          amount: 0,
         };
 
         result = await getOne<{ total: number }>(
@@ -353,6 +368,7 @@ export async function getTransactionsByPeriodAndCategory(
 
         if (result && result.total) {
           row.value = Math.round((result.total / totalBalance) * 100);
+          row.amount = result.total;
         }
 
         if (percent > maxPercent && percent > 0) {
@@ -380,6 +396,8 @@ export async function getTransactionsByPeriodAndCategory(
           value: 0,
           color: generateRandomColor(),
           gradientCenterColor: generateRandomColor(),
+          focused: false,
+          amount: 0,
         };
 
         result = await getOne<{ total: number }>(
@@ -400,6 +418,7 @@ export async function getTransactionsByPeriodAndCategory(
 
         if (result && result.total) {
           row.value = Math.round((result.total / totalBalance) * 100);
+          row.amount = result.total;
         }
 
         if (percent > maxPercent && percent > 0) {
@@ -433,6 +452,7 @@ export async function getTransactionsByPeriodAndCategory(
           color: generateRandomColor(),
           gradientCenterColor: generateRandomColor(),
           focused: false,
+          amount: 0,
         };
 
         result = await getOne<{ total: number }>(
@@ -449,6 +469,7 @@ export async function getTransactionsByPeriodAndCategory(
 
         if (result && result.total) {
           row.value = Math.round((result.total / totalBalance) * 100);
+          row.amount = result.total;
         }
 
         if (percent > maxPercent && percent > 0) {
@@ -474,6 +495,7 @@ export async function getTransactionsByPeriodAndCategory(
           color: generateRandomColor(),
           gradientCenterColor: generateRandomColor(),
           focused: false,
+          amount: 0,
         };
 
         result = await getOne<{ total: number }>(
@@ -490,6 +512,7 @@ export async function getTransactionsByPeriodAndCategory(
 
         if (result && result.total) {
           row.value = Math.round((result.total / totalBalance) * 100);
+          row.amount = result.total;
         }
 
         if (percent > maxPercent && percent > 0) {

@@ -227,6 +227,8 @@ export async function updateActivityAndStreak(todayISO?: string) {
   const last_active = stats?.last_activity_date ?? null;
   const last_checked = stats?.last_checked_date ?? null;
 
+  console.log("lastChecked ", last_checked);
+
   if (last_checked === today) {
     // déjà checké aujourd’hui => stop
     return {

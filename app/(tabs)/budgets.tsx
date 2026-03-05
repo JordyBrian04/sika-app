@@ -75,23 +75,59 @@ export default function TabTwoScreen() {
 
   const fetchCategories = async () => {
     // console.log(await listeCategories());
-    const cats = await listeCategories();
-    setCategories(
-      cats
-        .filter((c) => c.type === "depense" || c.type === "event")
-        .map((c) => ({ key: c.id, value: c.name })),
-    );
+    setLoading(true);
+    try {
+      const cats = await listeCategories();
+      setCategories(
+        cats
+          .filter((c) => c.type === "depense" || c.type === "event")
+          .map((c) => ({ key: c.id, value: c.name })),
+      );
+    } catch (error) {
+      alert("Erreur de recupération des données");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchDatas = async () => {
-    console.log(await getCategoryMonthlyExpense(currentMonth));
-    setDatas(await getCategoryMonthlyExpense(currentMonth));
+    setLoading(true);
+    try {
+      const res = await getCategoryMonthlyExpense(currentMonth);
+      setDatas(res);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useFocusEffect(
     useCallback(() => {
-      fetchCategories();
-      fetchDatas();
+      let active = true;
+
+      (async () => {
+        setLoading(true);
+        try {
+          const cats = await listeCategories();
+          if (active) {
+            setCategories(
+              cats
+                .filter((c) => c.type === "depense" || c.type === "event")
+                .map((c) => ({ key: c.id, value: c.name })),
+            );
+          }
+
+          const budgets = await getCategoryMonthlyExpense(currentMonth);
+          if (active) setDatas(budgets);
+        } catch (e) {
+          console.warn(e);
+        } finally {
+          if (active) setLoading(false);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
     }, [currentMonth]),
   );
 
@@ -673,7 +709,7 @@ export default function TabTwoScreen() {
               onChangeText={(text) =>
                 setBudgetDataset({
                   ...budgetDataset,
-                  montant: Number(text) || 0,
+                  montant: text.replace(/\D/g, ""),
                 })
               }
               keyboardType="numeric"

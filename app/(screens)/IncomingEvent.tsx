@@ -10,11 +10,16 @@ import {
   updateRecurringPayment,
 } from "@/src/db/repositories/recurringRepo";
 import {
+  advanceRecurring,
+  insertTransactionFromRecurring,
+} from "@/src/notifications/recurringHandlers";
+import {
   markRecurringOccurrencePaid,
   markRecurringOccurrenceSkipped,
 } from "@/src/services/recurring/validation";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
+import { toYYYYMMDD } from "@/src/utils/date";
 import { formatMoney } from "@/src/utils/format";
 import {
   AntDesign,
@@ -82,6 +87,7 @@ const IncomingEvent = () => {
   >([]);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(new Date());
+  const [selectedId, setSelectedId] = useState<number>();
   const toggleDatePicker = () => {
     setOpen(!open);
   };
@@ -165,6 +171,30 @@ const IncomingEvent = () => {
       fetchPaiements();
     }, []),
   );
+
+  const manualPay = async (id: number) => {
+    setSelectedId(id);
+    setLoading2(true);
+
+    try {
+      const saved = await insertTransactionFromRecurring(
+        id,
+        toYYYYMMDD(new Date()),
+      );
+      if (saved) await advanceRecurring(saved);
+
+      fetchPaiements();
+    } catch (error) {
+      alert("Erreur de paiement");
+      console.error("Erreur de paiement ", error);
+    } finally {
+      setLoading2(false);
+    }
+
+    // setTimeout(() => {
+    //   setLoading2(false);
+    // }, 5000);
+  };
 
   const toggleSwitch = () =>
     setTransactionData({
@@ -467,6 +497,37 @@ const IncomingEvent = () => {
               </Text>
             </View>
           </View>
+          <TouchableOpacity
+            style={{
+              backgroundColor:
+                color === "#FFFFFF" ? COLORS.secondary : COLORS.dark,
+              padding: 12,
+              borderRadius: 15,
+              justifyContent: "center",
+              alignItems: "center",
+              opacity: loading2 ? 0.7 : 1,
+              flexDirection: "row",
+              gap: 6,
+            }}
+            onPress={async () => manualPay(trans.id)}
+            disabled={loading2}
+          >
+            {loading2 && selectedId === trans.id ? (
+              <ActivityIndicator
+                color={color === "#FFFFFF" ? COLORS.dark : COLORS.white}
+              />
+            ) : (
+              <Text
+                style={{
+                  fontFamily: FONT_FAMILY.bold,
+                  color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                  fontSize: 13,
+                }}
+              >
+                Payer maintenant{" "}
+              </Text>
+            )}
+          </TouchableOpacity>
         </TouchableOpacity>
       ))}
       {/* */}

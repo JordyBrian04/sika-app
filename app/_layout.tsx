@@ -10,6 +10,7 @@ import "react-native-reanimated";
 
 import { UserInactivityProvider } from "@/context/UserInactivity";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { enableAutoBackup, isAutoBackupEnabled } from "@/src/db/autoBackupTask";
 import { ensureAndroidChannels } from "@/src/notifications/channels";
 import {
   scheduleEndOfDayNotification,
@@ -19,7 +20,7 @@ import { registerEODNotificationListener } from "@/src/notifications/eodHandlers
 import { updateActivityAndStreak } from "@/src/services/gamification/daily";
 import { getMinWeekly } from "@/src/services/goals/goalsRepo";
 import Toast from "@/src/ui/components/Toast";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { migrate } from "../src/db";
 import { registerRecurringNotificationResponseListener } from "../src/notifications/recurringHandlers";
@@ -40,7 +41,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [ready, setReady] = useState(false);
   const fontsLoaded = useAppFonts();
-  let minWeekly = 0;
+  const minWeekly = useRef(0);
 
   useEffect(() => {
     migrate()
@@ -63,14 +64,24 @@ export default function RootLayout() {
 
       await updateActivityAndStreak();
 
-      minWeekly = await getMinWeekly();
+      minWeekly.current = await getMinWeekly();
+
+      const enabled = await isAutoBackupEnabled();
+      if (!enabled) {
+        try {
+          await enableAutoBackup(2);
+          console.log("✅ Auto-backup activé (tous les 3 jours)");
+        } catch (error) {
+          console.log("⚠️ Auto-backup non activé:", error);
+        }
+      }
     })();
 
     const sub = registerRecurringNotificationResponseListener(() =>
       toYYYYMMDD(new Date()),
     );
 
-    const eodsub = registerEODNotificationListener(minWeekly);
+    const eodsub = registerEODNotificationListener(minWeekly.current);
     return () => {
       sub.remove();
       eodsub.remove();

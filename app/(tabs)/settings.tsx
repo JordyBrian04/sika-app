@@ -3,13 +3,18 @@ import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import ExpenseCalendar60Days from "@/src/components/ExpenseCalendar60Days";
 import { listBadgesWithStatus } from "@/src/db/repositories/badgesRepo";
+import {
+  backupDatabaseToShare,
+  pickAndRestoreDatabase,
+  resetAllDatas,
+} from "@/src/db/repositories/settingRepo";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
 import {
   ExpenseDay,
   getExpenseCalendar60Days,
 } from "@/src/services/stats/expenseCalendar";
 import { FONT_FAMILY } from "@/src/theme/fonts";
-import { color } from "@/src/utils/colos";
+import { useAppTextColor } from "@/src/utils/colos";
 import {
   AntDesign,
   Entypo,
@@ -19,30 +24,111 @@ import {
 } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
+import * as Updates from "expo-updates";
 import React, { useEffect, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function TabFiveScreen() {
+  const color = useAppTextColor();
   const [user, setUser] = useState<LevelInfo | null>(null);
   const [initial, setInitiales] = useState<any>("");
   const [userBadges, setUserBadges] = useState<any[]>([]);
   const [calendar, setCalendar] = useState<ExpenseDay[]>([]);
+  const [loading, setLoading] = useState<
+    "backup" | "restore" | "delete" | null
+  >(null);
+  const [xpPer, setXpPer] = useState(0);
 
   const getUser = async () => {
     const res = await getProfile();
-    console.log(res);
     setUser(res ?? null);
-    const words = res.name?.split(" ");
-    const initials = words?.slice(0, 2).map((word: any) => word.charAt(0));
-    const initialsString = initials?.join("");
-    // console.log(initialsString);
+
+    if (!res) {
+      setInitiales("");
+      setUserBadges([]);
+      return;
+    }
+
+    const xpInto = user?.xpIntoLevel ?? 0;
+    const xpNext = user?.xpForNextLevel ?? 1; // évite /0
+    const xpPct = Math.max(0, Math.min(100, (xpInto / xpNext) * 100));
+    setXpPer(xpPct);
+
+    const words = (res.name ?? "").trim().split(/\s+/);
+    const initialsString = words
+      .slice(0, 2)
+      .map((w) => w.charAt(0))
+      .join("");
     setInitiales(initialsString);
 
     const userBagdeRes = await listBadgesWithStatus();
-    console.log(userBagdeRes);
     setUserBadges(userBagdeRes ?? []);
+  };
+
+  const onBackup = async () => {
+    try {
+      setLoading("backup");
+      const res = await backupDatabaseToShare();
+      Alert.alert("Sauvegarde", "Sauvegarde créée ✅");
+      console.log("Backup path:", res.backupPath);
+    } catch (e: any) {
+      Alert.alert("Erreur", e?.message ?? "Erreur backup.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const onRestore = async () => {
+    setLoading("restore");
+    const res: any = await pickAndRestoreDatabase();
+    setLoading(null);
+
+    if (!res.ok) {
+      if ("cancelled" in res && res.cancelled) return;
+      Alert.alert("Erreur", res.error);
+      return;
+    }
+
+    Alert.alert(
+      "Restauration OK ✅",
+      "La base a été restaurée. L’app va redémarrer pour recharger SQLite.",
+      [
+        {
+          text: "Redémarrer",
+          onPress: async () => {
+            // reload propre (évite les DB encore ouvertes)
+            try {
+              await Updates.reloadAsync();
+            } catch {
+              // fallback: l’utilisateur relance manuellement
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const deleteAllData = async () => {
+    setLoading("delete");
+    try {
+      await resetAllDatas();
+      Alert.alert("Données supprimées", "Toutes les données ont été effacées.");
+      await Updates.reloadAsync();
+      router.push("/");
+    } catch (error) {
+      console.error("Erreur lors de la réinitialisation des données:", error);
+    } finally {
+      setLoading(null);
+    }
   };
 
   useEffect(() => {
@@ -54,9 +140,72 @@ export default function TabFiveScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      getUser();
+      let active = true;
+
+      (async () => {
+        const res = await getProfile();
+        if (!active) return;
+
+        setUser(res ?? null);
+
+        if (!res) {
+          setInitiales("");
+          setUserBadges([]);
+          return;
+        }
+
+        const words = (res.name ?? "").trim().split(/\s+/);
+        setInitiales(
+          words
+            .slice(0, 2)
+            .map((w) => w.charAt(0))
+            .join(""),
+        );
+
+        const badges = await listBadgesWithStatus();
+        if (active) setUserBadges(badges ?? []);
+      })();
+
+      return () => {
+        active = false;
+      };
     }, []),
   );
+
+  function loadingModal() {
+    if (!loading) return null;
+
+    return (
+      <Modal transparent={true} visible={!!loading}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "white",
+              padding: 20,
+              borderRadius: 10,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ fontFamily: FONT_FAMILY.bold, fontSize: 18 }}>
+              {loading === "backup"
+                ? "Sauvegarde en cours..."
+                : loading === "restore"
+                  ? "Restauration en cours..."
+                  : "Suppression en cours..."}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ScrollView
@@ -162,7 +311,7 @@ export default function TabFiveScreen() {
                 style={{
                   backgroundColor: COLORS.green,
                   height: "100%",
-                  width: `${(user?.xpIntoLevel! / user?.xpForNextLevel!) * 100}%`,
+                  width: `${xpPer}%`,
                   borderRadius: 5,
                 }}
               />
@@ -335,7 +484,26 @@ export default function TabFiveScreen() {
               alignItems: "center",
               justifyContent: "space-between",
             }}
-            onPress={() => router.push("/(screens)/Categories")}
+            onPress={() =>
+              Alert.alert(
+                "Restauration ou sauvegarde des données",
+                "Voulez-vous sauvegarder vos données actuelles ou en restaurer une précédente ?",
+                [
+                  {
+                    text: "Sauvegarder",
+                    onPress: () => onBackup(),
+                  },
+                  {
+                    text: "Restaurer",
+                    onPress: () => onRestore(),
+                  },
+                  {
+                    text: "Annuler",
+                    style: "cancel",
+                  },
+                ],
+              )
+            }
           >
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
@@ -355,6 +523,55 @@ export default function TabFiveScreen() {
                 }}
               >
                 Sauvegarde et restauration des données
+              </ThemedText>
+            </View>
+            <Entypo name="chevron-small-right" size={24} color={COLORS.gray} />
+          </TouchableOpacity>
+
+          <View
+            style={{
+              height: 1,
+              backgroundColor: COLORS.gray + "30",
+              // marginVertical: 10,
+            }}
+          />
+
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+            onPress={() =>
+              Alert.alert(
+                "Confirmation",
+                "Voulez-vous vraiment supprimer toutes les données ?",
+                [
+                  { text: "Annuler", style: "cancel" },
+                  {
+                    text: "Supprimer",
+                    onPress: deleteAllData,
+                    style: "destructive",
+                  },
+                ],
+              )
+            }
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            >
+              <FontAwesome5 name="eraser" size={24} color={COLORS.red} />
+              <ThemedText
+                style={{
+                  fontFamily: FONT_FAMILY.medium,
+                  fontSize: 16,
+                  flexWrap: "wrap",
+                  // flex: 1,
+                  width: "80%",
+                  color: COLORS.red,
+                }}
+              >
+                Effacer toutes les données
               </ThemedText>
             </View>
             <Entypo name="chevron-small-right" size={24} color={COLORS.gray} />
@@ -448,6 +665,7 @@ export default function TabFiveScreen() {
         {/* Calendrier de dépense */}
         {calendar.length === 60 && <ExpenseCalendar60Days data={calendar} />}
       </ScrollView>
+      {loadingModal()}
     </SafeAreaView>
   );
 }

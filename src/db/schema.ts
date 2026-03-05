@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 11;
+export const DB_VERSION = 1;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -161,14 +161,6 @@ export const migrations: Record<number, string[]> = {
 );`,
     `CREATE INDEX IF NOT EXISTS idx_goal_contrib_goal_date
 ON goal_contributions(goal_id, date);`,
-
-    `CREATE TABLE IF NOT EXISTS goal_rules (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      goal_id INTEGER NOT NULL,
-      rule_type TEXT NOT NULL, -- 'round_up', 'budget_surplus'...
-      value INTEGER NOT NULL,     -- ex: for 'round_up' => '5' (round up to nearest 5)
-
-    `,
 
     `CREATE TABLE IF NOT EXISTS goal_rules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

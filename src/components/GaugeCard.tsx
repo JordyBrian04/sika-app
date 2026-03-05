@@ -59,7 +59,7 @@ export default function GaugeHalfCircle({
       duration: 900,
       easing: Easing.out(Easing.cubic),
     });
-  }, [value]);
+  }, [value, progressTarget]);
 
   useAnimatedReaction(
     () => Math.round(v.value),
