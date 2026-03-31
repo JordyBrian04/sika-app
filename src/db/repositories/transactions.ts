@@ -87,6 +87,36 @@ export async function addTransaction(input: {
   return transactionId?.id;
 }
 
+export async function editTransaction(input: {
+  amount: number;
+  type: TransactionType;
+  category_id?: number | null;
+  date: string; // 'YYYY-MM-DD' recommended
+  note?: string | null;
+  recurring_id?: number | null;
+  id: number;
+}) {
+  await runSql(
+    `UPDATE transactions SET amount=?, type=?, category_id=?, date=?, note=?, recurring_id=?
+     WHERE id=?`,
+    [
+      input.amount,
+      input.type,
+      input.category_id ?? null,
+      input.date,
+      input.note ?? null,
+      input.recurring_id ?? null,
+      input.id,
+    ],
+  );
+
+  const transactionId = await getOne<{ id: number }>(
+    `SELECT last_insert_rowid() as id;`,
+  );
+
+  return transactionId?.id;
+}
+
 export async function listTransactions(limit = 50): Promise<TransactionRow[]> {
   return all<TransactionRow>(
     `SELECT transactions.*, categories.name as category_name FROM transactions LEFT JOIN categories ON transactions.category_id = categories.id ORDER BY date DESC, id DESC LIMIT ?`,

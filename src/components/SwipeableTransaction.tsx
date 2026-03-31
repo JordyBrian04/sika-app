@@ -1,6 +1,8 @@
 import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
+import { useThemeColor } from "@/hooks/use-theme-color";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React from "react";
 import { Alert, Image, Pressable, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -17,9 +19,10 @@ const MAX_LEFT_SWIPE = ACTION_WIDTH * 2;
 const MAX_RIGHT_SWIPE = ACTION_WIDTH;
 
 // N'oubliez pas de passer les props nécessaires (router, color, etc.)
-const SwipeableTransaction = ({ trans, router, color }: any) => {
+const SwipeableTransaction = ({ trans, onPress, onPressEdit }: any) => {
   // 1. Chaque ligne a maintenant sa propre valeur partagée
   const SwipeAnimatedValue = useSharedValue(0);
+  const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
 
   // 2. Chaque ligne a son propre style animé
   const SwipeAnimatedStyle = useAnimatedStyle(() => {
@@ -117,7 +120,7 @@ const SwipeableTransaction = ({ trans, router, color }: any) => {
             backgroundColor: "rgb(255,70,70)",
           }}
         >
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => onPress?.(trans)}>
             <MaterialIcons name="delete" size={30} color="white" />
           </TouchableOpacity>
         </View>
@@ -132,7 +135,7 @@ const SwipeableTransaction = ({ trans, router, color }: any) => {
             borderBottomRightRadius: 10,
           }}
         >
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => onPressEdit?.(trans)}>
             <Feather name="edit" size={24} color="white" />
           </TouchableOpacity>
         </View>

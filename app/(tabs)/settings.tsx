@@ -345,7 +345,9 @@ export default function TabFiveScreen() {
               <FontAwesome5 name="fire" size={24} color={COLORS.red} />
             </View>
             <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 16 }}>
-              {user?.streak_days}
+              {(Number(user?.streak_days) || 0) < 10
+                ? String(Number(user?.streak_days) || 0).padStart(2, "0")
+                : Number(user?.streak_days) || 0}
             </ThemedText>
             <ThemedText
               style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray }}
@@ -370,7 +372,9 @@ export default function TabFiveScreen() {
               <AntDesign name="calendar" size={24} color={COLORS.primary} />
             </View>
             <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 16 }}>
-              {user?.active_days || 0}
+              {(Number(user?.active_days) || 0) < 10
+                ? String(Number(user?.active_days) || 0).padStart(2, "0")
+                : Number(user?.active_days) || 0}
             </ThemedText>
             <ThemedText
               style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray }}

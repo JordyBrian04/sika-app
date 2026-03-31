@@ -3,8 +3,10 @@ import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import SwipeableTransaction from "@/src/components/SwipeableTransaction";
+import { CategoryInput, listeCategories } from "@/src/db/repositories/category";
 import {
   deleteTransaction,
+  editTransaction,
   listTransactions,
   TransactionRow,
 } from "@/src/db/repositories/transactions";
@@ -13,6 +15,7 @@ import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { formatMoney } from "@/src/utils/format";
 import {
   AntDesign,
+  Feather,
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
@@ -20,7 +23,10 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -30,6 +36,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SelectList } from "react-native-dropdown-select-list";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const ListeTransactions = () => {
@@ -69,6 +76,22 @@ const ListeTransactions = () => {
   const handleTabPress = (key: "all" | "depense" | "entree") => {
     setSelectedTab(key);
   };
+  const [transactionData, setTransactionData] = useState({
+    amount: "0",
+    category_id: 0,
+    date: new Date().toISOString().substring(0, 10),
+    note: "",
+    recurring_id: null,
+    type: "",
+    id: 0,
+  });
+  const [categories, setCategories] = useState<
+    { key: number; value: string }[]
+  >([]);
+  const [OldCategories, setOldCategories] = useState<CategoryInput[]>([]);
+  const [open3, setOpen3] = useState(false);
+  const [date3, setDate3] = useState(new Date());
+  const [keyReset, setKeyReset] = useState(0);
 
   const handleFiltrePress = (
     key: "today" | "this_week" | "this_month" | "period",
@@ -77,6 +100,20 @@ const ListeTransactions = () => {
     if (key === "period") {
       openModal("periodeModal");
     }
+  };
+
+  const getConstant = async () => {
+    const cats = await listeCategories();
+    console.log(cats);
+    setOldCategories(cats);
+    // setCategories(
+    //   cats
+    //     .filter((c) => c.type === option)
+    //     .map((c) => ({ key: c.id, value: c.name })),
+    // );
+  };
+  const toggleDatePicker3 = () => {
+    setOpen2(!open3);
   };
 
   const toggleDatePicker = () => {
@@ -133,6 +170,25 @@ const ListeTransactions = () => {
     }
   };
 
+  const onChange3 = ({ type }: any, selectedDate: any) => {
+    if (type === "set") {
+      const currentDate = selectedDate;
+      setDate3(currentDate);
+
+      if (Platform.OS === "android") {
+        toggleDatePicker3();
+
+        //On attribu la date à la valeur date (currentDate.toLocaleDateString('fr-FR'))
+        setTransactionData({
+          ...transactionData,
+          date: currentDate.toISOString().substring(0, 10),
+        });
+      }
+    } else {
+      toggleDatePicker3();
+    }
+  };
+
   const confirmIOSDate = () => {
     // console.log(date.toISOString().substring(0, 10));
     setPeriode({
@@ -149,6 +205,28 @@ const ListeTransactions = () => {
       to: date.toISOString().substring(0, 10),
     });
     toggleDatePicker2();
+  };
+
+  const confirmIOSDate3 = () => {
+    // console.log(date.toISOString().substring(0, 10));
+    setTransactionData({
+      ...transactionData,
+      date: date3.toISOString().substring(0, 10),
+    });
+    toggleDatePicker3();
+  };
+
+  const resetData = () => {
+    setTransactionData({
+      amount: "0",
+      category_id: 0,
+      date: new Date().toISOString().substring(0, 10),
+      note: "",
+      recurring_id: null,
+      type: "",
+      id: 0,
+    });
+    setKeyReset((prev) => prev + 1);
   };
 
   const groupTransactionsByDate = (transactions: any[]) => {
@@ -177,59 +255,68 @@ const ListeTransactions = () => {
   };
 
   const fetchTransactions = async () => {
-    const allTransactions = await listTransactions(500); // Fetch more transactions for better filtering
-    setOldTransactions(allTransactions);
-    // Apply initial filter based on selected tab
-    let filtered = allTransactions;
-
-    if (filtre === "period") {
-      setTransactions([]);
-      return;
-    }
-
     setLoading(true);
-    if (filtre === "today") {
-      filtered = allTransactions.filter(
-        (t) => t.date === new Date().toISOString().split("T")[0],
-      );
-    }
+    try {
+      const allTransactions = await listTransactions(500); // Fetch more transactions for better filtering
+      setOldTransactions(allTransactions);
+      // Apply initial filter based on selected tab
+      let filtered = allTransactions;
 
-    if (filtre === "this_week") {
-      const startOfWeek = new Date();
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      filtered = allTransactions.filter((t) => {
-        const transactionDate = new Date(t.date);
-        return transactionDate >= startOfWeek && transactionDate <= endOfWeek;
-      });
-    }
+      if (filtre === "period") {
+        setTransactions([]);
+        return;
+      }
 
-    if (filtre === "this_month") {
-      const startOfMonth = new Date(
-        new Date().getFullYear(),
-        new Date().getMonth(),
-        1,
-      );
-      const endOfMonth = new Date(
-        new Date().getFullYear(),
-        new Date().getMonth() + 1,
-        0,
-      );
-      filtered = allTransactions.filter((t) => {
-        const transactionDate = new Date(t.date);
-        return transactionDate >= startOfMonth && transactionDate <= endOfMonth;
-      });
-    }
+      if (filtre === "today") {
+        filtered = allTransactions.filter(
+          (t) => t.date === new Date().toISOString().split("T")[0],
+        );
+      }
 
-    setTransactions(groupTransactionsByDate(filtered));
-    setLoading(false);
-    console.log("Transactions chargées:", groupTransactionsByDate(filtered));
+      if (filtre === "this_week") {
+        const startOfWeek = new Date();
+        startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        filtered = allTransactions.filter((t) => {
+          const transactionDate = new Date(t.date);
+          return transactionDate >= startOfWeek && transactionDate <= endOfWeek;
+        });
+      }
+
+      if (filtre === "this_month") {
+        const startOfMonth = new Date(
+          new Date().getFullYear(),
+          new Date().getMonth(),
+          1,
+        );
+        const endOfMonth = new Date(
+          new Date().getFullYear(),
+          new Date().getMonth() + 1,
+          0,
+        );
+        filtered = allTransactions.filter((t) => {
+          const transactionDate = new Date(t.date);
+          return (
+            transactionDate >= startOfMonth && transactionDate <= endOfMonth
+          );
+        });
+      }
+
+      setTransactions(groupTransactionsByDate(filtered));
+      console.log("Transactions chargées:", groupTransactionsByDate(filtered));
+    } catch (error) {
+      alert("Erreur de chargement des transactions");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   React.useEffect(() => {
     // setLoading(true);
     fetchTransactions();
+    getConstant();
     // setLoading(false);
   }, [filtre]);
 
@@ -255,16 +342,391 @@ const ListeTransactions = () => {
     setTransactions(groupTransactionsByDate(filtered));
   };
 
-  const handleDelete = async (id: any) => {
+  // const handleDelete = async (id: any) => {
+  //   try {
+  //     await deleteTransaction(id);
+  //     alert("Supprimé avec succès!");
+  //     fetchTransactions();
+  //   } catch (error) {
+  //     alert("Erreur de suppression");
+  //     console.error("erreur suppression transaction ", error);
+  //   }
+  // };
+
+  const handleSave = async () => {
+    if (
+      transactionData.type !== "event" &&
+      (transactionData.amount === "0" || transactionData.category_id === 0)
+    ) {
+      alert("Veuillez remplir tous les champs obligatoires.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      await deleteTransaction(id);
-      alert("Supprimé avec succès!");
-      fetchTransactions();
+      const res: any = await editTransaction({
+        amount: parseInt(transactionData.amount),
+        type: transactionData.type as any,
+        category_id: transactionData.category_id,
+        date: transactionData.date,
+        note: transactionData.note,
+        recurring_id: transactionData.recurring_id,
+        id: transactionData.id,
+      });
+
+      if (parseInt(res) > 0) {
+        resetData();
+        fetchTransactions();
+        closeModal();
+      }
     } catch (error) {
-      alert("Erreur de suppression");
-      console.error("erreur suppression transaction ", error);
+      alert(
+        "Une erreur est survenue lors de l'enregistrement de la transaction.",
+      );
+      console.error("Error saving transaction:", error);
+    } finally {
+      resetData();
+      setLoading(false);
     }
   };
+
+  const handleDelete = async (id: any) => {
+    Alert.alert(
+      "Suppression",
+      "Voulez-vous vraiment supprimer cette transaction ?",
+      [
+        {
+          text: "Oui",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteTransaction(id);
+              alert("Supprimé avec succès!");
+              fetchTransactions();
+            } catch (error) {
+              alert("Erreur de suppression");
+              console.error("erreur suppression transaction ", error);
+            }
+          },
+        },
+        { text: "Non", style: "cancel" },
+      ],
+    );
+  };
+
+  const handleEdit = async (trans: any) => {
+    console.log(trans);
+    setCategories(
+      OldCategories.filter((c) => c.type === trans.type).map((c) => ({
+        key: c.id,
+        value: c.name,
+      })),
+    );
+    setTransactionData({
+      amount: trans.amount.toString(),
+      category_id: trans.category_id,
+      date: trans.date,
+      note: trans.note,
+      type: trans.type,
+      recurring_id: null,
+      id: trans.id,
+    });
+    setKeyReset((prev) => prev + 1);
+    openModal("transactionModal");
+    // toggleSheet();
+  };
+  function transactionModal() {
+    return (
+      <Modal
+        visible={isVisible("transactionModal")}
+        animationType="slide"
+        transparent
+        onRequestClose={closeModal}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.5)",
+          }}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS == "ios" ? "padding" : "height"}
+            style={{
+              flex: 1,
+              justifyContent: "flex-end",
+              alignItems: "center",
+            }}
+          >
+            <View
+              style={{
+                width: "100%",
+                backgroundColor:
+                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                padding: 20,
+                position: "absolute",
+                bottom: 0,
+                paddingBottom: 70,
+                gap: 20,
+                //   alignItems: "center",
+              }}
+            >
+              <View
+                style={{
+                  gap: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
+                  Montant (CFA)
+                </ThemedText>
+                <TextInput
+                  placeholder="0"
+                  keyboardType="numeric"
+                  style={{
+                    fontFamily: FONT_FAMILY.bold,
+                    fontSize: 24,
+                    width: "100%",
+                    color: color,
+                    textAlign: "center",
+                  }}
+                  placeholderTextColor={color}
+                  onChangeText={(e) =>
+                    setTransactionData({
+                      ...transactionData,
+                      amount: e,
+                    })
+                  }
+                  value={transactionData.amount}
+                />
+              </View>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  // width: "100%",
+                  justifyContent: "center",
+                  gap: 12,
+                }}
+              >
+                <SelectList
+                  data={categories}
+                  key={keyReset}
+                  setSelected={(val: string) =>
+                    setTransactionData({
+                      ...transactionData,
+                      category_id: parseInt(val),
+                    })
+                  }
+                  placeholder="Choisir une catégorie"
+                  inputStyles={{
+                    color: color,
+                    fontFamily: FONT_FAMILY.regular,
+                  }}
+                  searchPlaceholder="Entrez une catégorie"
+                  dropdownTextStyles={{
+                    color: color,
+                    fontFamily: FONT_FAMILY.regular,
+                  }}
+                  closeicon={<Ionicons name="close" size={18} color={color} />}
+                  searchicon={
+                    <Ionicons name="search" size={18} color={color} />
+                  }
+                  arrowicon={
+                    <Feather name="chevron-down" size={24} color={color} />
+                  }
+                  save="key"
+                  defaultOption={{
+                    key: transactionData.category_id,
+                    value:
+                      categories.find(
+                        (c) => c.key === transactionData.category_id,
+                      )?.value || "",
+                  }}
+                />
+
+                <View
+                  style={
+                    {
+                      // flexDirection: "row",
+                      // alignItems: "center",
+                      // width: "70%",
+                      // justifyContent: "space-between",
+                    }
+                  }
+                >
+                  {open3 && (
+                    <DateTimePicker
+                      mode="date"
+                      display="spinner"
+                      value={date3}
+                      onChange={onChange3}
+                      style={{
+                        height: 120,
+                        marginTop: 20,
+                        width: "100%",
+                      }}
+                      textColor="#000"
+                    />
+                  )}
+
+                  {open3 && Platform.OS === "ios" && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-around",
+                        marginBottom: 20,
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={{
+                          padding: 10,
+                          backgroundColor: "gray",
+                          borderRadius: 10,
+                        }}
+                        onPress={toggleDatePicker3}
+                      >
+                        <Text style={{ color: "black", fontWeight: "bold" }}>
+                          Annuler
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={{
+                          padding: 10,
+                          backgroundColor: "gray",
+                          borderRadius: 10,
+                        }}
+                        onPress={confirmIOSDate3}
+                      >
+                        <Text style={{ color: "black", fontWeight: "bold" }}>
+                          Valider
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {!open3 && (
+                    <TouchableOpacity onPress={toggleDatePicker3}>
+                      <TextInput
+                        placeholder="Date debut"
+                        placeholderTextColor="#000"
+                        style={{
+                          borderWidth: 1,
+                          borderColor: "gray",
+                          padding: 10,
+                          borderRadius: 10,
+                          color: color,
+                          height: 52,
+                          width: 145,
+                        }}
+                        editable={false}
+                        value={transactionData.date}
+                        onChangeText={(e: any) =>
+                          setTransactionData({
+                            ...transactionData,
+                            date: e,
+                          })
+                        }
+                        onPressIn={toggleDatePicker3}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                  Note
+                </ThemedText>
+                <TextInput
+                  multiline
+                  placeholder="Ajouter une note"
+                  placeholderTextColor={color}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "gray",
+                    padding: 13,
+                    borderRadius: 10,
+                    color: color,
+                    marginTop: 8,
+                    textAlignVertical: "top",
+                    height: 100,
+                    fontFamily: FONT_FAMILY.regular,
+                  }}
+                  value={transactionData.note}
+                  onChangeText={(e) =>
+                    setTransactionData({ ...transactionData, note: e })
+                  }
+                />
+              </View>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    padding: 10,
+                    backgroundColor: COLORS.gray,
+                    borderRadius: 12,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "48%",
+                  }}
+                  onPress={closeModal}
+                >
+                  <Text
+                    style={{
+                      color: COLORS.dark,
+                      fontFamily: FONT_FAMILY.semibold,
+                    }}
+                  >
+                    Annuler
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    padding: 10,
+                    backgroundColor: COLORS.green,
+                    borderRadius: 12,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "48%",
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                  disabled={loading}
+                  onPress={handleSave}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={COLORS.white} />
+                  ) : (
+                    <Text
+                      style={{
+                        color: COLORS.white,
+                        fontFamily: FONT_FAMILY.semibold,
+                      }}
+                    >
+                      Enregistrer
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    );
+  }
 
   function periodeModal() {
     return (
@@ -746,8 +1208,8 @@ const ListeTransactions = () => {
                   <SwipeableTransaction
                     key={trans.id}
                     trans={trans}
-                    router={router}
-                    color={color}
+                    onPress={(id: any) => handleDelete(id)}
+                    onPressEdit={(id: any) => handleEdit(id)}
                   />
                   // <TouchableOpacity
                   //   key={trans.id}
@@ -927,6 +1389,7 @@ const ListeTransactions = () => {
         {/* </ScrollView> */}
       </ThemedView>
       {periodeModal()}
+      {transactionModal()}
     </SafeAreaView>
   );
 };

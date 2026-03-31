@@ -29,11 +29,12 @@ export async function scheduleEndOfDayNotification(hour = 22, minute = 0) {
       body: "On vérifie si tu as réussi une journée sans dépense ✅",
       categoryIdentifier: EOD_CATEGORY,
       data: { kind: "EOD_CHECK" },
+      sound: "default",
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
       minute,
-      repeats: true,
       channelId: EOD_CHANNEL_ID,
     },
   });

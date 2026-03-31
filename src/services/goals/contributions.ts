@@ -1,4 +1,5 @@
 import { all, getOne, runSql } from "@/src/db/";
+import { checkGoalCompleted, checkSavingBadges } from "@/src/services/badges/badgeService";
 import { updateGoalStreakForWeek } from "@/src/services/goals/streak";
 import { toYYYYMMDD, weekKey } from "@/src/utils/goalDates";
 import { updateActivityAndStreak } from "../gamification/daily";
@@ -44,7 +45,15 @@ export async function addContribution(input: {
   await reward("ADD_SAVING", input.goal_id);
   await updateGoalStreakForWeek(input.goal_id, weekKey(new Date(date)));
   await updateActivityAndStreak();
-  await onSaving(input.amount, res?.min_weekly ?? 0); // assuming 1000 is the default minWeekly value
+  await onSaving(input.amount, res?.min_weekly ?? 0);
+
+  // Badges épargne + vérification objectif atteint
+  try {
+    await checkSavingBadges();
+    await checkGoalCompleted(input.goal_id);
+  } catch (e) {
+    console.warn("checkSavingBadges/checkGoalCompleted failed:", e);
+  }
 }
 
 export async function listContributions(goal_id: number, limit = 50) {

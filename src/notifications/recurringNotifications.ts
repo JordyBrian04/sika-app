@@ -95,28 +95,41 @@ export async function scheduleRecurringNotifications(input: ScheduleInput) {
 
   // J-2 (ou remind_days_before)
   if (remindDate.getTime() > Date.now()) {
+    // Planifier le rappel à 9h le jour du rappel
+    remindDate.setHours(9, 0, 0, 0);
     const idBefore = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Paiement à venir",
         body: `${input.name} • ${input.amount} FCFA (dans ${input.remindDaysBefore} jours)`,
         categoryIdentifier: RECURRING_CATEGORY_ID,
         data: { recurringId: input.recurringId, kind: "before" },
+        sound: "default",
       },
-      trigger: { date: remindDate, channelId: "recurring" } as any,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: remindDate,
+        channelId: "recurring",
+      },
     });
     await upsertNotificationLink(input.recurringId, "before", idBefore);
   }
 
-  // Jour J
+  // Jour J — notification à 8h le matin
   if (next.getTime() > Date.now()) {
+    next.setHours(8, 0, 0, 0);
     const idDue = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Paiement aujourd'hui",
         body: `${input.name} • ${input.amount} FCFA`,
         categoryIdentifier: RECURRING_CATEGORY_ID,
         data: { recurringId: input.recurringId, kind: "due" },
+        sound: "default",
       },
-      trigger: { date: next, channelId: "recurring" } as any,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: next,
+        channelId: "recurring",
+      },
     });
     await upsertNotificationLink(input.recurringId, "due", idDue);
   }

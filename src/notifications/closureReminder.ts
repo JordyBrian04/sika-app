@@ -14,12 +14,12 @@ function getNextLastDayOfMonth(): Date {
 
   // Dernier jour du mois en cours
   const lastDay = new Date(year, month + 1, 0);
-  lastDay.setHours(20, 0, 0, 0);
+  lastDay.setHours(23, 30, 0, 0);
 
   // Si on est déjà passé (dernier jour après 20h), planifier pour le mois suivant
   if (now >= lastDay) {
     const nextLastDay = new Date(year, month + 2, 0);
-    nextLastDay.setHours(20, 0, 0, 0);
+    nextLastDay.setHours(23, 30, 0, 0);
     return nextLastDay;
   }
 
@@ -42,8 +42,18 @@ export async function scheduleClosureReminder() {
 
   const triggerDate = getNextLastDayOfMonth();
   const monthNames = [
-    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+    "Janvier",
+    "Février",
+    "Mars",
+    "Avril",
+    "Mai",
+    "Juin",
+    "Juillet",
+    "Août",
+    "Septembre",
+    "Octobre",
+    "Novembre",
+    "Décembre",
   ];
   const monthName = monthNames[triggerDate.getMonth()];
 
@@ -62,6 +72,6 @@ export async function scheduleClosureReminder() {
   });
 
   console.log(
-    `📅 Rappel clôture planifié pour le ${triggerDate.toLocaleDateString("fr-FR")} à 20h`,
+    `📅 Rappel clôture planifié pour le ${triggerDate.toLocaleDateString("fr-FR")} à 23h30`,
   );
 }

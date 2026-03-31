@@ -1,6 +1,7 @@
 import { getOne, runSql } from "@/src/db";
-import { getWeeklyPack } from "@/src/services/missions/weekly"; // ton fichier weekly.ts
-import { toYYYYMMDD } from "@/src/utils/date"; // ta fonction existante
+import { checkNoSpendDayBadge } from "@/src/services/badges/badgeService";
+import { getWeeklyPack } from "@/src/services/missions/weekly";
+import { toYYYYMMDD } from "@/src/utils/date";
 import { reward } from "../gamification/xpService";
 
 type WeeklyBoost = {
@@ -101,9 +102,13 @@ export async function autoCheckNoSpendDay(minWeekly: number, cutoffHour = 22) {
     [1, boost.id],
   );
 
-  // Ici tu branches tes rewards:
+  // Rewards XP + badge
   await reward("NO_SPEND_DAY", boost.reward_xp);
-  // await addCoins(boost.reward_coins);
+  try {
+    await checkNoSpendDayBadge();
+  } catch (e) {
+    console.warn("checkNoSpendDayBadge failed:", e);
+  }
 
   return { ok: true, reason: "BOOST_VALIDATED" as const };
 }

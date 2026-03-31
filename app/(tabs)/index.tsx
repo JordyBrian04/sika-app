@@ -16,6 +16,8 @@ import {
 } from "@/src/db/repositories/recurringRepo";
 import {
   addTransaction,
+  deleteTransaction,
+  editTransaction,
   listTransactions,
   TransactionType,
 } from "@/src/db/repositories/transactions";
@@ -34,6 +36,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -336,12 +339,14 @@ export default function HomeScreen() {
     setLoading(true);
 
     try {
+      let res: any;
+
       // Ajout transaction dans la base de données
       if (transactionData.type === "event") {
         // Enregistrer dans la table des paiements récurrents
         // console.log("Données de la charge mensuelle à enregistrer:", transactionData);
         // await addRecurringPayment(transactionData);
-        const res = await addRecurringPayment({
+        res = await addRecurringPayment({
           name: transactionData.name,
           amount: parseInt(transactionData.amount),
           category_id: transactionData.category_id,
@@ -355,21 +360,35 @@ export default function HomeScreen() {
         console.log("ID du paiement récurrent ajouté:", res);
       } else {
         // Enregistrer dans la table des transactions
-        const res = await addTransaction({
-          amount: parseInt(transactionData.amount),
-          type: transactionData.type,
-          category_id: transactionData.category_id,
-          date: transactionData.date,
-          note: transactionData.note,
-          recurring_id: transactionData.recurring_id,
-        });
+        if (transactionData.id > 0) {
+          res = await editTransaction({
+            amount: parseInt(transactionData.amount),
+            type: transactionData.type,
+            category_id: transactionData.category_id,
+            date: transactionData.date,
+            note: transactionData.note,
+            recurring_id: transactionData.recurring_id,
+            id: transactionData.id,
+          });
+        } else {
+          res = await addTransaction({
+            amount: parseInt(transactionData.amount),
+            type: transactionData.type,
+            category_id: transactionData.category_id,
+            date: transactionData.date,
+            note: transactionData.note,
+            recurring_id: transactionData.recurring_id,
+          });
+        }
 
         console.log("ID de la transaction ajoutée:", res);
       }
 
-      resetData();
-      getDatas(); // Rafraîchir la liste des transactions
-      toggleSheet();
+      if (parseInt(res) > 0) {
+        resetData();
+        getDatas(); // Rafraîchir la liste des transactions
+        toggleSheet();
+      }
     } catch (error) {
       alert(
         "Une erreur est survenue lors de l'enregistrement de la transaction.",
@@ -379,6 +398,58 @@ export default function HomeScreen() {
       resetData();
       setLoading(false);
     }
+  };
+
+  const handleDelete = async (id: any) => {
+    Alert.alert(
+      "Suppression",
+      "Voulez-vous vraiment supprimer cette transaction ?",
+      [
+        {
+          text: "Oui",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteTransaction(id);
+              alert("Supprimé avec succès");
+              getDatas();
+            } catch (error) {
+              alert("Erreur de suppression");
+              console.error("Erreur de suppression de transaction ", error);
+            }
+          },
+        },
+        { text: "Non", style: "cancel" },
+      ],
+    );
+  };
+
+  const handleEdit = async (trans: any) => {
+    setCategories(
+      OldCategories.filter((c) => c.type === trans.type).map((c) => ({
+        key: c.id,
+        value: c.name,
+      })),
+    );
+    setOption(trans.type);
+    setTransactionData({
+      amount: trans.amount.toString(),
+      category_id: trans.category_id,
+      created_at: trans.created_at,
+      date: trans.date,
+      note: trans.note,
+      type: trans.type,
+      recurring_id: null,
+      id: trans.id,
+      name: "",
+      frequency: "semaine",
+      interval_count: "1",
+      next_date: new Date().toISOString().substring(0, 10),
+      remind_days_before: 2,
+      active: 1,
+    });
+    setKeyReset((prev) => prev + 1);
+    toggleSheet();
   };
 
   const handleTypeChange = (type: TransactionType) => {
@@ -1019,8 +1090,8 @@ export default function HomeScreen() {
                         <SwipeableTransaction
                           key={trans.id}
                           trans={trans}
-                          router={router}
-                          color={color}
+                          onPress={(id: any) => handleDelete(id)}
+                          onPressEdit={(id: any) => handleEdit(id)}
                         />
                         // <GestureDetector key={trans.id} gesture={panGesture}>
                         //   <Animated.View style={SwipeAnimatedStyle}>
@@ -1364,6 +1435,13 @@ export default function HomeScreen() {
                       <Feather name="chevron-down" size={24} color={color} />
                     }
                     save="key"
+                    defaultOption={{
+                      key: transactionData.category_id,
+                      value:
+                        categories.find(
+                          (c) => c.key === transactionData.category_id,
+                        )?.value || "",
+                    }}
                   />
 
                   <View

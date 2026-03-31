@@ -1,4 +1,5 @@
 import { all, getOne, runSql } from "@/src/db";
+import { checkGoalBadges } from "@/src/services/badges/badgeService";
 import { toYYYYMMDD } from "@/src/utils/goalDates";
 import { reward } from "../gamification/xpService";
 import { deleteGoalContribution } from "./contributions";
@@ -45,6 +46,12 @@ export async function createGoal(input: {
   );
 
   await reward("CREATE_GOAL", res?.id);
+
+  try {
+    await checkGoalBadges();
+  } catch (e) {
+    console.warn("checkGoalBadges failed:", e);
+  }
 
   return res ? res.id : 0;
 }

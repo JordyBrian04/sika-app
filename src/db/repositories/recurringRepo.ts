@@ -62,7 +62,7 @@ export async function addRecurringPayment(input: RecurringInput) {
     });
   }
 
-  await checkRecurringBadges(1);
+  await checkRecurringBadges();
 
   await reward("ADD_RECURRING", recurringId);
   await updateDailyMissions(formatDateYYYYMMDD(new Date()), "ADD_RECURRING");

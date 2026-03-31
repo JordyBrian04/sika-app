@@ -30,6 +30,7 @@ import {
   setupRecurringNotificationCategory,
 } from "../src/notifications/recurringNotifications";
 import { scheduleClosureReminder } from "../src/notifications/closureReminder";
+import { checkBudgetControlBadges } from "../src/services/badges/badgeService";
 import { runRecurringCatchUp } from "../src/services/recurring/catchup";
 import { useAppFonts } from "../src/theme/useAppFonts";
 import { toYYYYMMDD } from "../src/utils/date";
@@ -65,6 +66,13 @@ export default function RootLayout() {
       await scheduleClosureReminder();
 
       await updateActivityAndStreak();
+
+      // Vérifier les badges de contrôle budgétaire (mensuel, hebdo, 3 mois)
+      try {
+        await checkBudgetControlBadges();
+      } catch (e) {
+        console.warn("checkBudgetControlBadges failed:", e);
+      }
 
       minWeekly.current = await getMinWeekly();
 
