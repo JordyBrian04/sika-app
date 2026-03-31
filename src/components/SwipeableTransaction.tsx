@@ -1,12 +1,13 @@
 import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
+import { Feather, MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { Alert, Image, Pressable, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from "react-native-reanimated";
 import { FONT_FAMILY } from "../theme/fonts";
 import { formatMoney } from "../utils/format";
@@ -30,10 +31,14 @@ const SwipeableTransaction = ({ trans, router, color }: any) => {
   const SEUIL_OUVERTURE = -MAX_LEFT_SWIPE / 2;
 
   // 3. Chaque ligne a son propre détecteur de mouvement
+  //    activeOffsetX : le pan ne s'active qu'après 15px horizontaux
+  //    failOffsetY   : le pan échoue (= laisse le scroll vertical) si
+  //                    le doigt bouge de plus de 10px verticalement d'abord
   const panGesture = Gesture.Pan()
+    .activeOffsetX([-15, 15])
+    .failOffsetY([-10, 10])
     .onBegin(() => {})
     .onUpdate((event) => {
-      // Assurez-vous que MAX_RIGHT_SWIPE et MAX_LEFT_SWIPE sont définis dans ce fichier
       SwipeAnimatedValue.value = Math.min(
         0,
         Math.max(-MAX_LEFT_SWIPE, event.translationX),
@@ -41,13 +46,11 @@ const SwipeableTransaction = ({ trans, router, color }: any) => {
     })
     .onEnd(() => {
       if (SwipeAnimatedValue.value < SEUIL_OUVERTURE) {
-        // On "claque" la ligne en position ouverte (vers la gauche)
         SwipeAnimatedValue.value = withSpring(-MAX_LEFT_SWIPE, {
           damping: 20,
           stiffness: 90,
         });
       } else {
-        // Sinon, le glissement n'était pas suffisant, on ramène à 0
         SwipeAnimatedValue.value = withSpring(0, {
           damping: 20,
           stiffness: 90,
@@ -114,7 +117,9 @@ const SwipeableTransaction = ({ trans, router, color }: any) => {
             backgroundColor: "rgb(255,70,70)",
           }}
         >
-          <TouchableOpacity></TouchableOpacity>
+          <TouchableOpacity>
+            <MaterialIcons name="delete" size={30} color="white" />
+          </TouchableOpacity>
         </View>
         <View
           style={{
@@ -126,7 +131,11 @@ const SwipeableTransaction = ({ trans, router, color }: any) => {
             borderTopRightRadius: 10,
             borderBottomRightRadius: 10,
           }}
-        ></View>
+        >
+          <TouchableOpacity>
+            <Feather name="edit" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
       </View>
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[SwipeAnimatedStyle, { width: "100%" }]}>

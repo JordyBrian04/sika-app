@@ -2,6 +2,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import SwipeableTransaction from "@/src/components/SwipeableTransaction";
 import {
   deleteTransaction,
   listTransactions,
@@ -19,11 +20,10 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
   FlatList,
-  Image,
   Modal,
   Platform,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -38,6 +38,7 @@ const ListeTransactions = () => {
   const [open2, setOpen2] = useState(false);
   const [date, setDate] = useState(new Date());
   const [date2, setDate2] = useState(new Date());
+  const [loading, setLoading] = useState(false);
   const [periode, setPeriode] = useState({
     from: new Date().toISOString().substring(0, 10),
     to: new Date().toISOString().substring(0, 10),
@@ -151,7 +152,7 @@ const ListeTransactions = () => {
   };
 
   const groupTransactionsByDate = (transactions: any[]) => {
-    const groups = transactions.reduce((acc, transaction) => {
+    const groups = transactions.reduce((acc: any, transaction: any) => {
       const date = transaction.date;
       if (!acc[date]) {
         acc[date] = [];
@@ -161,12 +162,18 @@ const ListeTransactions = () => {
     }, {});
 
     // On transforme l'objet en tableau pour le rendu
+    // et on calcule le solde du jour (entrées - dépenses)
     return Object.keys(groups)
       .sort((a, b) => b.localeCompare(a))
-      .map((date) => ({
-        date,
-        data: groups[date],
-      }));
+      .map((date) => {
+        const data = groups[date];
+        const dayBalance = data.reduce((sum: number, t: any) => {
+          if (t.type === "entree") return sum + t.amount;
+          if (t.type === "depense") return sum - t.amount;
+          return sum;
+        }, 0);
+        return { date, data, dayBalance };
+      });
   };
 
   const fetchTransactions = async () => {
@@ -180,6 +187,7 @@ const ListeTransactions = () => {
       return;
     }
 
+    setLoading(true);
     if (filtre === "today") {
       filtered = allTransactions.filter(
         (t) => t.date === new Date().toISOString().split("T")[0],
@@ -215,19 +223,24 @@ const ListeTransactions = () => {
     }
 
     setTransactions(groupTransactionsByDate(filtered));
+    setLoading(false);
     console.log("Transactions chargées:", groupTransactionsByDate(filtered));
   };
 
   React.useEffect(() => {
+    // setLoading(true);
     fetchTransactions();
+    // setLoading(false);
   }, [filtre]);
 
   const handleFiltrerByPeriod = () => {
+    setLoading(true);
     const { from, to } = periode;
     const filtered = OldTransactions.filter((t) => {
       return t.date >= from && t.date <= to;
     });
     setTransactions(groupTransactionsByDate(filtered));
+    setLoading(false);
     closeModal();
   };
 
@@ -678,193 +691,221 @@ const ListeTransactions = () => {
           style={{ flex: 1 }}
           scrollEnabled={true}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={fetchTransactions}
+            />
+          }
         >
           <FlatList
             data={transactions}
             keyExtractor={(item) => item.date}
             renderItem={({ item }) => (
               <View style={{ marginBottom: 20 }}>
-                <Text
+                <View
                   style={{
-                    fontFamily: FONT_FAMILY.medium,
-                    fontSize: 16,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                     marginBottom: 10,
-                    color: "#888",
                   }}
                 >
-                  {item.date === new Date().toISOString().split("T")[0]
-                    ? "Aujourd'hui"
-                    : new Date(item.date).toLocaleDateString("fr-FR", {
-                        day: "numeric",
-                        month: "long",
-                      })}
-                </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONT_FAMILY.medium,
+                      fontSize: 16,
+                      color: "#888",
+                    }}
+                  >
+                    {item.date === new Date().toISOString().split("T")[0]
+                      ? "Aujourd'hui"
+                      : new Date(item.date).toLocaleDateString("fr-FR", {
+                          day: "numeric",
+                          month: "long",
+                        })}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONT_FAMILY.semibold,
+                      fontSize: 14,
+                      color:
+                        item.dayBalance > 0
+                          ? "#34C759"
+                          : item.dayBalance < 0
+                            ? "#FF3B30"
+                            : "#888",
+                    }}
+                  >
+                    {item.dayBalance > 0 ? "+" : ""}
+                    {formatMoney(String(item.dayBalance))} FCFA
+                  </Text>
+                </View>
 
                 {item.data.map((trans: any) => (
-                  <TouchableOpacity
+                  <SwipeableTransaction
                     key={trans.id}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-around",
-                      alignItems: "center",
-                      backgroundColor:
-                        color === "#FFFFFF" ? COLORS.dark : COLORS.secondary,
-                      padding: 10,
-                      borderRadius: 8,
-                      marginBottom: 8,
-                    }}
-                    onPress={
-                      () =>
-                        router.push({
-                          pathname: "/(screens)/DetailTransactions",
-                          params: {
-                            id: trans.id,
-                            amount: trans.amount,
-                            note: trans.note,
-                            date: trans.date,
-                            name: trans.category_name,
-                            type: trans.type,
-                            created_at: trans.created_at,
-                          },
-                        })
-                      // console.log("Transaction details on press:", trans)
-                    }
-                    onLongPress={() =>
-                      Alert.alert(
-                        "Suppression",
-                        "Voulez-vous vraiment supprimer cette transaction ?",
-                        [
-                          {
-                            text: "Oui",
-                            onPress: () => handleDelete(trans.id),
-                            style: "destructive",
-                          },
-                          { text: "Non", style: "cancel" },
-                        ],
-                      )
-                    }
-                  >
-                    <View
-                      style={{
-                        backgroundColor:
-                          color === "#FFFFFF" ? COLORS.secondary : COLORS.dark,
-                        padding: 15,
-                        borderRadius: 8,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 15,
-                        width: 50,
-                        justifyContent: "center",
-                        height: 50,
-                      }}
-                    >
-                      <Image
-                        source={
-                          trans.category_name
-                            ?.toLowerCase()
-                            .includes("alimentation")
-                            ? require("../../assets/images/diet.png")
-                            : trans.category_name
-                                  ?.toLowerCase()
-                                  .includes("transport")
-                              ? require("../../assets/images/transportation.png")
-                              : trans.category_name
-                                    ?.toLowerCase()
-                                    .includes("facture")
-                                ? require("../../assets/images/bill.png")
-                                : trans.category_name
-                                      ?.toLowerCase()
-                                      .includes("abonnement")
-                                  ? require("../../assets/images/membership.png")
-                                  : trans.category_name
-                                        ?.toLowerCase()
-                                        .includes("sante")
-                                    ? require("../../assets/images/pills.png")
-                                    : trans.category_name
-                                          ?.toLowerCase()
-                                          .includes("loisirs")
-                                      ? require("../../assets/images/theater.png")
-                                      : trans.category_name
-                                            ?.toLowerCase()
-                                            .includes("salaire")
-                                        ? require("../../assets/images/payroll.png")
-                                        : trans.category_name
-                                              ?.toLowerCase()
-                                              .includes("depart")
-                                          ? require("../../assets/images/salary.png")
-                                          : trans.category_name
-                                                ?.toLowerCase()
-                                                .includes("mission")
-                                            ? require("../../assets/images/mission.png")
-                                            : trans.category_name
-                                                  ?.toLowerCase()
-                                                  .includes("famille")
-                                              ? require("../../assets/images/big-family.png")
-                                              : trans.category_name
-                                                    ?.toLowerCase()
-                                                    .includes("education")
-                                                ? require("../../assets/images/stack-of-books.png")
-                                                : trans.category_name
-                                                      ?.toLowerCase()
-                                                      .includes("shopping")
-                                                  ? require("../../assets/images/online-shopping.png")
-                                                  : trans.category_name
-                                                        ?.toLowerCase()
-                                                        .includes(
-                                                          "téléphone/internet",
-                                                        )
-                                                    ? require("../../assets/images/iphone.png")
-                                                    : trans.category_name
-                                                          ?.toLowerCase()
-                                                          .includes("soin")
-                                                      ? require("../../assets/images/lotions.png")
-                                                      : require("../../assets/images/shapes.png")
-                        }
-                        // tintColor={
-                        //   color === "#FFFFFF" ? COLORS.white : COLORS.dark
-                        // }
-                        style={{ width: 30, height: 30 }}
-                      />
-                    </View>
+                    trans={trans}
+                    router={router}
+                    color={color}
+                  />
+                  // <TouchableOpacity
+                  //   key={trans.id}
+                  //   style={{
+                  //     flexDirection: "row",
+                  //     justifyContent: "space-around",
+                  //     alignItems: "center",
+                  //     backgroundColor:
+                  //       color === "#FFFFFF" ? COLORS.dark : COLORS.secondary,
+                  //     padding: 10,
+                  //     borderRadius: 8,
+                  //     marginBottom: 8,
+                  //   }}
+                  //   onPress={
+                  //     () =>
+                  //       router.push({
+                  //         pathname: "/(screens)/DetailTransactions",
+                  //         params: {
+                  //           id: trans.id,
+                  //           amount: trans.amount,
+                  //           note: trans.note,
+                  //           date: trans.date,
+                  //           name: trans.category_name,
+                  //           type: trans.type,
+                  //           created_at: trans.created_at,
+                  //         },
+                  //       })
+                  //   }
+                  //   onLongPress={() =>
+                  //     Alert.alert(
+                  //       "Suppression",
+                  //       "Voulez-vous vraiment supprimer cette transaction ?",
+                  //       [
+                  //         {
+                  //           text: "Oui",
+                  //           onPress: () => handleDelete(trans.id),
+                  //           style: "destructive",
+                  //         },
+                  //         { text: "Non", style: "cancel" },
+                  //       ],
+                  //     )
+                  //   }
+                  // >
+                  //   <View
+                  //     style={{
+                  //       backgroundColor:
+                  //         color === "#FFFFFF" ? COLORS.secondary : COLORS.dark,
+                  //       padding: 15,
+                  //       borderRadius: 8,
+                  //       flexDirection: "row",
+                  //       alignItems: "center",
+                  //       gap: 15,
+                  //       width: 50,
+                  //       justifyContent: "center",
+                  //       height: 50,
+                  //     }}
+                  //   >
+                  //     <Image
+                  //       source={
+                  //         trans.category_name
+                  //           ?.toLowerCase()
+                  //           .includes("alimentation")
+                  //           ? require("../../assets/images/diet.png")
+                  //           : trans.category_name
+                  //                 ?.toLowerCase()
+                  //                 .includes("transport")
+                  //             ? require("../../assets/images/transportation.png")
+                  //             : trans.category_name
+                  //                   ?.toLowerCase()
+                  //                   .includes("facture")
+                  //               ? require("../../assets/images/bill.png")
+                  //               : trans.category_name
+                  //                     ?.toLowerCase()
+                  //                     .includes("abonnement")
+                  //                 ? require("../../assets/images/membership.png")
+                  //                 : trans.category_name
+                  //                       ?.toLowerCase()
+                  //                       .includes("sante")
+                  //                   ? require("../../assets/images/pills.png")
+                  //                   : trans.category_name
+                  //                         ?.toLowerCase()
+                  //                         .includes("loisirs")
+                  //                     ? require("../../assets/images/theater.png")
+                  //                     : trans.category_name
+                  //                           ?.toLowerCase()
+                  //                           .includes("salaire")
+                  //                       ? require("../../assets/images/payroll.png")
+                  //                       : trans.category_name
+                  //                             ?.toLowerCase()
+                  //                             .includes("depart")
+                  //                         ? require("../../assets/images/salary.png")
+                  //                         : trans.category_name
+                  //                               ?.toLowerCase()
+                  //                               .includes("mission")
+                  //                           ? require("../../assets/images/mission.png")
+                  //                           : trans.category_name
+                  //                                 ?.toLowerCase()
+                  //                                 .includes("famille")
+                  //                             ? require("../../assets/images/big-family.png")
+                  //                             : trans.category_name
+                  //                                   ?.toLowerCase()
+                  //                                   .includes("education")
+                  //                               ? require("../../assets/images/stack-of-books.png")
+                  //                               : trans.category_name
+                  //                                     ?.toLowerCase()
+                  //                                     .includes("shopping")
+                  //                                 ? require("../../assets/images/online-shopping.png")
+                  //                                 : trans.category_name
+                  //                                       ?.toLowerCase()
+                  //                                       .includes(
+                  //                                         "téléphone/internet",
+                  //                                       )
+                  //                                   ? require("../../assets/images/iphone.png")
+                  //                                   : trans.category_name
+                  //                                         ?.toLowerCase()
+                  //                                         .includes("soin")
+                  //                                     ? require("../../assets/images/lotions.png")
+                  //                                     : require("../../assets/images/shapes.png")
+                  //       }
+                  //       style={{ width: 30, height: 30 }}
+                  //     />
+                  //   </View>
 
-                    <View style={{ width: 170, gap: 4 }}>
-                      <ThemedText
-                        style={{
-                          fontSize: 14,
-                          fontFamily: FONT_FAMILY.semibold,
-                        }}
-                        ellipsizeMode="tail"
-                        numberOfLines={1}
-                      >
-                        {trans.note}
-                      </ThemedText>
-                      <ThemedText
-                        style={{
-                          fontSize: 12,
-                          fontFamily: FONT_FAMILY.medium,
-                        }}
-                      >
-                        {trans.created_at.split(" ")[1]} ● {trans.category_name}
-                      </ThemedText>
-                    </View>
+                  //   <View style={{ width: 170, gap: 4 }}>
+                  //     <ThemedText
+                  //       style={{
+                  //         fontSize: 14,
+                  //         fontFamily: FONT_FAMILY.semibold,
+                  //       }}
+                  //       ellipsizeMode="tail"
+                  //       numberOfLines={1}
+                  //     >
+                  //       {trans.note}
+                  //     </ThemedText>
+                  //     <ThemedText
+                  //       style={{
+                  //         fontSize: 12,
+                  //         fontFamily: FONT_FAMILY.medium,
+                  //       }}
+                  //     >
+                  //       {trans.created_at.split(" ")[1]} ● {trans.category_name}
+                  //     </ThemedText>
+                  //   </View>
 
-                    <ThemedText
-                      style={{
-                        fontSize: 14,
-                        fontFamily: FONT_FAMILY.semibold,
-                        // color:
-                        //   color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                      }}
-                    >
-                      {formatMoney(trans.amount)} CFA
-                    </ThemedText>
-                  </TouchableOpacity>
+                  //   <ThemedText
+                  //     style={{
+                  //       fontSize: 14,
+                  //       fontFamily: FONT_FAMILY.semibold,
+                  //     }}
+                  //   >
+                  //     {formatMoney(trans.amount)} CFA
+                  //   </ThemedText>
+                  // </TouchableOpacity>
                 ))}
               </View>
             )}
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
-            // contentContainerStyle={{ flex: 1 }}
             ListEmptyComponent={() => (
               <View
                 style={{
@@ -881,7 +922,6 @@ const ListeTransactions = () => {
                 </ThemedText>
               </View>
             )}
-            // contentContainerStyle={{ gap: 12 }}
           />
         </ScrollView>
         {/* </ScrollView> */}

@@ -75,29 +75,51 @@ async function grantXpOnce(action: string, refId: number, xp: number) {
 
 // =====================================================
 // 1) updateStreak(today)
+//    Appelé à chaque ajout de transaction.
+//    Met à jour streak_days, active_days et last_activity_date.
 // =====================================================
 export async function updateStreak(todayYYYYMMDD: string) {
   const profile = await getOne<{
     streak_days: number;
+    active_days: number;
     last_activity_date: string | null;
-  }>(`SELECT streak_days, last_activity_date FROM user_profile WHERE id = 1`);
+  }>(
+    `SELECT streak_days, active_days, last_activity_date FROM user_profile WHERE id = 1`,
+  );
 
   const last = profile?.last_activity_date ?? null;
   const streak = profile?.streak_days ?? 0;
+  const activeDays = profile?.active_days ?? 0;
 
-  // déjà compté aujourd’hui
+  // Déjà compté aujourd’hui → pas de changement
   if (last === todayYYYYMMDD) {
     return { streak_days: streak, changed: false };
   }
 
-  const yesterday = getYesterdayYYYYMMDD(todayYYYYMMDD);
-
   let nextStreak = 1;
-  if (last === yesterday) nextStreak = streak + 1;
+  let nextActiveDays = activeDays + 1;
+
+  if (last) {
+    const daysDiff = diffDays(
+      new Date(`${todayYYYYMMDD}T00:00:00`),
+      new Date(`${last}T00:00:00`),
+    );
+    if (daysDiff === 1) {
+      // Jour consécutif → on incrémente
+      nextStreak = streak + 1;
+    } else if (daysDiff === 0) {
+      // Même jour (ne devrait pas arriver ici, mais sécurité)
+      nextStreak = streak;
+      nextActiveDays = activeDays;
+    } else {
+      // Plus d’1 jour d’écart → streak reset à 1
+      nextStreak = 1;
+    }
+  }
 
   await runSql(
-    `UPDATE user_profile SET streak_days = ?, last_activity_date = ? WHERE id = 1`,
-    [nextStreak, todayYYYYMMDD],
+    `UPDATE user_profile SET streak_days = ?, active_days = ?, last_activity_date = ? WHERE id = 1`,
+    [nextStreak, nextActiveDays, todayYYYYMMDD],
   );
 
   return { streak_days: nextStreak, changed: true };
@@ -216,78 +238,71 @@ async function hasAnyTransactionOnDate(day: string): Promise<boolean> {
   return (row?.count ?? 0) > 0;
 }
 
+/**
+ * updateActivityAndStreak()
+ * Appelé au démarrage de l’app et après un ajout d’épargne.
+ *
+ * Rôle : vérifier si l’utilisateur a été actif aujourd’hui (transaction existante).
+ *   - Si OUI  → mettre à jour streak + active_days + last_activity_date
+ *   - Si NON  → NE PAS casser le streak tout de suite.
+ *               Le streak ne sera cassé que lorsqu’une nouvelle activité arrive
+ *               un jour non-consécutif (géré par updateStreak()).
+ *               On met juste à jour last_checked_date pour ne pas re-checker.
+ *
+ * Avant ce fix, la fonction remettait le streak à 0 dès le démarrage de l’app
+ * si aucune transaction n’existait encore aujourd’hui, AVANT même que
+ * l’utilisateur ait eu le temps d’en ajouter une.
+ */
 export async function updateActivityAndStreak(todayISO?: string) {
   const today = todayISO ?? formatDateYYYYMMDD(new Date());
 
   const stats = await getOne<StatsRow>(
     `SELECT streak_days, active_days, last_activity_date, last_checked_date FROM user_profile WHERE id = 1`,
   );
-  const streak_days = stats?.streak_days ?? 0;
-  const active_days = stats?.active_days ?? 0;
-  const last_active = stats?.last_activity_date ?? null;
-  const last_checked = stats?.last_checked_date ?? null;
+  if (!stats) return null;
 
-  console.log("lastChecked ", last_checked);
+  const { streak_days, active_days, last_activity_date: last_active, last_checked_date: last_checked } = stats;
 
+  // Déjà vérifié aujourd’hui → retourner les vraies valeurs
   if (last_checked === today) {
-    // déjà checké aujourd’hui => stop
-    return {
-      streak_days: 0,
-      active_days: 0,
-      last_active_date: null,
-      last_checked_date: today,
-    };
+    return stats;
   }
 
   const didTxToday = await hasAnyTransactionOnDate(today);
 
   if (!didTxToday) {
-    if (last_active) {
-      const daysSinceLastActive = diffDays(
-        new Date(today),
-        new Date(last_active),
-      );
-      if (daysSinceLastActive >= 1) {
-        // Perte du streak
-        await runSql(
-          `UPDATE user_profile SET streak_days = 0, last_checked_date = ? WHERE id = 1`,
-          [today],
-        );
-      } else {
-        await runSql(
-          `UPDATE user_profile SET last_checked_date = ? WHERE id = 1`,
-          [today],
-        );
-      }
-    } else {
-      await runSql(
-        `UPDATE user_profile SET last_checked_date = ? WHERE id = 1`,
-        [today],
-      );
-    }
-
-    return getOne<StatsRow>(
-      `SELECT streak_days, active_days, last_activity_date, last_checked_date FROM user_profile WHERE id = 1`,
+    // Pas encore de transaction aujourd’hui.
+    // On ne casse PAS le streak ici — l’utilisateur a peut-être
+    // juste pas encore ajouté de transaction.
+    // On enregistre seulement qu’on a vérifié.
+    await runSql(
+      `UPDATE user_profile SET last_checked_date = ? WHERE id = 1`,
+      [today],
     );
+    return { ...stats, last_checked_date: today };
   }
 
+  // Il y a déjà une transaction aujourd’hui → mettre à jour streak & active_days
   let nextStreak = 1;
   let nextActiveDays = active_days;
 
   if (last_active !== today) {
-    nextActiveDays = active_days + 1;
+    nextActiveDays = (active_days ?? 0) + 1;
   }
 
   if (!last_active) {
     nextStreak = 1;
   } else {
-    const daysDiff = diffDays(new Date(today), new Date(last_active));
+    const daysDiff = diffDays(
+      new Date(`${today}T00:00:00`),
+      new Date(`${last_active}T00:00:00`),
+    );
     if (daysDiff === 1) {
       nextStreak = streak_days + 1;
-    } else if (daysDiff > 1) {
-      nextStreak = 1; // Perte du streak
+    } else if (daysDiff === 0) {
+      nextStreak = streak_days; // même jour
     } else {
-      nextStreak = streak_days; // même jour, pas de changement de streak
+      nextStreak = 1; // streak cassé (>1 jour sans activité)
     }
   }
 

@@ -536,6 +536,39 @@ export default function TabFiveScreen() {
             }}
           />
 
+          {/* <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+            onPress={() => router.push("/(screens)/Categories")}
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            >
+              <MaterialCommunityIcons
+                name="bank-check"
+                size={24}
+                color={color === "#FFFFFF" ? COLORS.white : COLORS.dark}
+              />
+              <ThemedText
+                style={{ fontFamily: FONT_FAMILY.medium, fontSize: 16 }}
+              >
+                Clôture du mois
+              </ThemedText>
+            </View>
+            <Entypo name="chevron-small-right" size={24} color={COLORS.gray} />
+          </TouchableOpacity> */}
+
+          {/* <View
+            style={{
+              height: 1,
+              backgroundColor: COLORS.gray + "30",
+              // marginVertical: 10,
+            }}
+          /> */}
+
           <TouchableOpacity
             style={{
               flexDirection: "row",

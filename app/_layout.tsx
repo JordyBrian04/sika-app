@@ -29,6 +29,7 @@ import {
   rescheduleAllActiveRecurring,
   setupRecurringNotificationCategory,
 } from "../src/notifications/recurringNotifications";
+import { scheduleClosureReminder } from "../src/notifications/closureReminder";
 import { runRecurringCatchUp } from "../src/services/recurring/catchup";
 import { useAppFonts } from "../src/theme/useAppFonts";
 import { toYYYYMMDD } from "../src/utils/date";
@@ -61,6 +62,7 @@ export default function RootLayout() {
       await ensureAndroidChannels();
       await setupEODCategory();
       await scheduleEndOfDayNotification(22, 0);
+      await scheduleClosureReminder();
 
       await updateActivityAndStreak();
 
@@ -148,6 +150,10 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="(screens)/DetailGoal"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="(screens)/ClotureMois"
                 options={{ headerShown: false, gestureEnabled: true }}
               />
             </Stack>

@@ -1,16 +1,17 @@
 import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
+import { useThemeColor } from "@/hooks/use-theme-color";
 import React from "react";
 import { View } from "react-native";
 import { PieChart } from "react-native-gifted-charts";
 import { FONT_FAMILY } from "../theme/fonts";
-import { color } from "../utils/colos";
 import { formatMoney } from "../utils/format";
 
 export default function PieChartRender({ datas }: any) {
   const [focusedIndex, setFocusedIndex] = React.useState(
     datas.find((item: any) => item.focused === true),
   );
+  const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
 
   console.log(focusedIndex);
 

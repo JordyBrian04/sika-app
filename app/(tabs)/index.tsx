@@ -23,7 +23,7 @@ import {
   advanceRecurring,
   insertTransactionFromRecurring,
 } from "@/src/notifications/recurringHandlers";
-import { getConstante } from "@/src/services/AsyncStorage";
+import { getConstante, saveContante } from "@/src/services/AsyncStorage";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
@@ -158,6 +158,7 @@ export default function HomeScreen() {
   const [solde, setSolde] = useState<number>(0);
   const [loading2, setLoading2] = useState(false);
   const [selectedId, setSelectedId] = useState<number>();
+  const [showSolde, setShowSolde] = useState(false);
 
   const OPTIONS = [
     { key: "entree", label: "Entrée" },
@@ -223,12 +224,12 @@ export default function HomeScreen() {
   };
 
   const getUser = async () => {
-    console.log(await getProfile());
+    // console.log(await getProfile());
     setUser((await getProfile()) ?? null);
   };
 
   const groupTransactionsByDate = (transactions: any[]) => {
-    const groups = transactions.reduce((acc, transaction) => {
+    const groups = transactions.reduce((acc: any, transaction: any) => {
       const date = transaction.date;
       if (!acc[date]) {
         acc[date] = [];
@@ -238,12 +239,18 @@ export default function HomeScreen() {
     }, {});
 
     // On transforme l'objet en tableau pour le rendu
+    // et on calcule le solde du jour (entrées - dépenses)
     return Object.keys(groups)
       .sort((a, b) => b.localeCompare(a))
-      .map((date) => ({
-        date,
-        data: groups[date],
-      }));
+      .map((date) => {
+        const data = groups[date];
+        const dayBalance = data.reduce((sum: number, t: any) => {
+          if (t.type === "entree") return sum + t.amount;
+          if (t.type === "depense") return sum - t.amount;
+          return sum;
+        }, 0);
+        return { date, data, dayBalance };
+      });
   };
 
   const getConstant = async () => {
@@ -257,6 +264,10 @@ export default function HomeScreen() {
         .filter((c) => c.type === option)
         .map((c) => ({ key: c.id, value: c.name })),
     );
+
+    const soldeShow = await getConstante("showSolde");
+    console.log(soldeShow);
+    setShowSolde(soldeShow === "enabled");
   };
 
   const getDatas = async () => {
@@ -470,6 +481,13 @@ export default function HomeScreen() {
     // }, 5000);
   };
 
+  const toggleShowSolde = async () => {
+    const newValue = !showSolde;
+    setShowSolde(newValue);
+    const setting = newValue ? "enabled" : "disabled";
+    await saveContante("showSolde", JSON.stringify(setting));
+  };
+
   const panGesture = Gesture.Pan()
     .onBegin(() => {})
     .onUpdate((event) => {
@@ -573,18 +591,46 @@ export default function HomeScreen() {
               >
                 Solde Total
               </ThemedText>
-              <Animated.Text
-                style={[
-                  {
-                    fontFamily: FONT_FAMILY.bold,
-                    color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                    fontSize: 32,
-                  },
-                  animatedStyle,
-                ]}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
               >
-                {`${solde.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`}
-              </Animated.Text>
+                {showSolde ? (
+                  <Animated.Text
+                    style={[
+                      {
+                        fontFamily: FONT_FAMILY.bold,
+                        color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                        fontSize: 32,
+                      },
+                      animatedStyle,
+                    ]}
+                  >
+                    {`${solde.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`}
+                  </Animated.Text>
+                ) : (
+                  <Text
+                    style={{
+                      fontFamily: FONT_FAMILY.bold,
+                      color: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                      fontSize: 32,
+                    }}
+                  >
+                    *************
+                  </Text>
+                )}
+
+                <TouchableOpacity onPress={toggleShowSolde}>
+                  {showSolde ? (
+                    <Feather name="eye" size={24} color="black" />
+                  ) : (
+                    <Feather name="eye-off" size={24} color="black" />
+                  )}
+                </TouchableOpacity>
+              </View>
               <ThemedText
                 style={{
                   fontFamily: FONT_FAMILY.regular,
@@ -681,6 +727,35 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
             {/* Fin card */}
+
+            {/* Bouton Clôture du mois */}
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                marginHorizontal: 20,
+                marginTop: 16,
+                paddingVertical: 14,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: COLORS.primary + "40",
+              }}
+              onPress={() => router.navigate("/(screens)/ClotureMois")}
+            >
+              <Feather name="lock" size={18} color={COLORS.primary} />
+              <Text
+                style={{
+                  fontFamily: FONT_FAMILY.semibold,
+                  fontSize: 14,
+                  color: COLORS.primary,
+                }}
+              >
+                Clôture du mois
+              </Text>
+            </TouchableOpacity>
+            {/* Fin Bouton Clôture */}
 
             {/* Payement à venir */}
             <View style={{ gap: 8, marginTop: 20 }}>
@@ -901,21 +976,44 @@ export default function HomeScreen() {
                   keyExtractor={(item) => item.date}
                   renderItem={({ item }) => (
                     <View style={{ marginBottom: 20 }}>
-                      <Text
+                      <View
                         style={{
-                          fontFamily: FONT_FAMILY.medium,
-                          fontSize: 16,
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
                           marginBottom: 10,
-                          color: "#888",
                         }}
                       >
-                        {item.date === new Date().toISOString().split("T")[0]
-                          ? "Aujourd'hui"
-                          : new Date(item.date).toLocaleDateString("fr-FR", {
-                              day: "numeric",
-                              month: "long",
-                            })}
-                      </Text>
+                        <Text
+                          style={{
+                            fontFamily: FONT_FAMILY.medium,
+                            fontSize: 16,
+                            color: "#888",
+                          }}
+                        >
+                          {item.date === new Date().toISOString().split("T")[0]
+                            ? "Aujourd'hui"
+                            : new Date(item.date).toLocaleDateString("fr-FR", {
+                                day: "numeric",
+                                month: "long",
+                              })}
+                        </Text>
+                        <Text
+                          style={{
+                            fontFamily: FONT_FAMILY.semibold,
+                            fontSize: 14,
+                            color:
+                              item.dayBalance > 0
+                                ? "#34C759"
+                                : item.dayBalance < 0
+                                  ? "#FF3B30"
+                                  : "#888",
+                          }}
+                        >
+                          {item.dayBalance > 0 ? "+" : ""}
+                          {formatMoney(String(item.dayBalance))} FCFA
+                        </Text>
+                      </View>
 
                       {item.data.map((trans: any) => (
                         <SwipeableTransaction
