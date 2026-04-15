@@ -65,6 +65,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const MAX_TRANSLATE_Y = -SCREEN_HEIGHT + 50;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const AnimatedPressable = Animated.createAnimatedComponent(PlatformPressable);
@@ -453,8 +454,9 @@ export default function HomeScreen() {
   };
 
   const handleTypeChange = (type: TransactionType) => {
+    // Open taller for the recurring/event form which has more fields
     type === "event"
-      ? ref.current?.scrollTo(-700)
+      ? ref.current?.scrollTo(MAX_TRANSLATE_Y)
       : ref.current?.scrollTo(-500);
     setKeyReset((prev) => prev + 1);
     setTransactionData({ ...transactionData, type: type, category_id: 0 });
@@ -1310,18 +1312,18 @@ export default function HomeScreen() {
         <BottomSheet ref={ref}>
           <ScrollView
             ref={ScrollViewRef}
-            keyboardShouldPersistTaps="always"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={true}
+            nestedScrollEnabled={true}
+            bounces={true}
+            overScrollMode="always"
             style={{ flex: 1 }}
             contentContainerStyle={{
               padding: 20,
               gap: 20,
               paddingBottom: 150,
-              // height: SCREEN_HEIGHT,
-              // backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-              zIndex: 999,
               width: "100%",
-              // flex: 1,
             }}
           >
             <View

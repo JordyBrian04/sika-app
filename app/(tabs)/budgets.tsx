@@ -583,14 +583,17 @@ export default function TabTwoScreen() {
       <BottomSheet ref={ref}>
         <ScrollView
           ref={scrollViewRef}
-          keyboardShouldPersistTaps="always"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+          bounces={true}
+          overScrollMode="always"
           style={{ flex: 1 }}
           contentContainerStyle={{
             padding: 20,
             gap: 20,
             paddingBottom: 150,
-            zIndex: 999,
             width: "100%",
           }}
         >

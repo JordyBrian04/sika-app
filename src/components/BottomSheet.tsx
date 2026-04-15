@@ -1,7 +1,7 @@
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import * as React from "react";
-import { Dimensions, Keyboard, StyleSheet } from "react-native";
+import { Dimensions, Keyboard, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Portal } from "react-native-portalize";
 import Animated, {
@@ -16,7 +16,6 @@ import Animated, {
 } from "react-native-reanimated";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 type PropsBottomSheet = {
   children?: React.ReactNode;
@@ -33,12 +32,12 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
   ({ children }, ref) => {
     const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
     const translateY = useSharedValue(SCREEN_HEIGHT);
-    // const translateY = useSharedValue(0);
     const context = useSharedValue({ y: 0 });
-    // const MAX_TRANSLATE_Y = SCREEN_HEIGHT * 0.15;
     const active = useSharedValue(false);
     const activeJS = React.useRef(false);
     const handleScale = useSharedValue(1);
+    /** Track the destination the caller last requested (JS-side) */
+    const lastDestination = React.useRef(-500);
 
     const keyboardHeight = useSharedValue(0);
 
@@ -46,21 +45,10 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
       const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
         if (active.value) {
           keyboardHeight.value = e.endCoordinates.height;
-
-          // On ajuste la position actuelle pour remonter de la taille du clavier
-          // Note: On utilise withTiming ou withSpring pour la fluidité
-          // translateY.value = withSpring(
-          //   -SCREEN_HEIGHT / 1.5 - e.endCoordinates.height,
-          //   {
-          //     damping: 20,
-          //     stiffness: 90,
-          //   },
-          // );
           const dest = Math.max(
             -SCREEN_HEIGHT / 1.5 - e.endCoordinates.height,
             MAX_TRANSLATE_Y,
           );
-
           translateY.value = withSpring(dest, { damping: 20, stiffness: 90 });
         }
       });
@@ -68,8 +56,11 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
       const hideSub = Keyboard.addListener("keyboardDidHide", () => {
         if (active.value) {
           keyboardHeight.value = 0;
-          // On revient à la position haute normale
-          translateY.value = withSpring(-500);
+          // Restore to the caller's last requested position
+          translateY.value = withSpring(lastDestination.current, {
+            damping: 20,
+            stiffness: 90,
+          });
         }
       });
 
@@ -77,12 +68,10 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
         showSub.remove();
         hideSub.remove();
       };
-    }, [MAX_TRANSLATE_Y]);
+    }, []);
 
     const scrollTo = (destination: number) => {
-      // console.log("destination", destination);
       "worklet";
-      // active.value = destination !== 0;
       active.value = destination < SCREEN_HEIGHT;
       translateY.value = withSpring(destination, {
         damping: 50,
@@ -92,46 +81,34 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
 
     const scrollToJS = React.useCallback((destination: number) => {
       activeJS.current = destination < SCREEN_HEIGHT;
+      lastDestination.current = destination;
       runOnUI(scrollTo)(destination);
     }, []);
 
-    //   const isActive = React.useCallback(() => {
-    //   "worklet";
-    //   return active.value;
-    // }, []);
-
     const isActive = React.useCallback(() => activeJS.current, []);
-
-    // React.useImperativeHandle(ref, () => ({ scrollTo, isActive }), [
-    //   scrollTo,
-    //   isActive,
-    // ]);
 
     React.useImperativeHandle(ref, () => ({
       scrollTo: scrollToJS,
       isActive,
     }));
 
-    const animatedSheetStyle = useAnimatedStyle(() => {
-      return {
-        borderRadius: interpolate(
-          translateY.value,
-          [MAX_TRANSLATE_Y + 50, MAX_TRANSLATE_Y],
-          [25, 5],
-          Extrapolation.CLAMP,
-        ),
-        transform: [{ translateY: translateY.value }],
-      };
-    });
+    const animatedSheetStyle = useAnimatedStyle(() => ({
+      borderRadius: interpolate(
+        translateY.value,
+        [MAX_TRANSLATE_Y + 50, MAX_TRANSLATE_Y],
+        [25, 5],
+        Extrapolation.CLAMP,
+      ),
+      transform: [{ translateY: translateY.value }],
+    }));
 
+    // ── Pan gesture ONLY on the handle area ──
     const gesture = Gesture.Pan()
       .onStart(() => {
         context.value = { y: translateY.value };
         handleScale.value = withSpring(1.2, { duration: 100 });
       })
       .onUpdate((event) => {
-        // translateY.value = event.translationY + context.value.y;
-        // translateY.value = Math.max(translateY.value, MAX_TRANSLATE_Y);
         translateY.value = Math.max(
           event.translationY + context.value.y,
           MAX_TRANSLATE_Y,
@@ -141,18 +118,11 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
         "worklet";
         handleScale.value = withSpring(1, { duration: 150 });
         if (translateY.value > -SCREEN_HEIGHT / 3) {
-          // scrollTo(0);
           scrollTo(SCREEN_HEIGHT);
         } else if (translateY.value < -SCREEN_HEIGHT / 1.5) {
           scrollTo(MAX_TRANSLATE_Y);
         }
       });
-
-    const rBottomSheetStyle = useAnimatedStyle(() => {
-      return {
-        transform: [{ translateY: translateY.value }],
-      };
-    });
 
     const animatedbackdropStyle = useAnimatedStyle(() => ({
       opacity: withTiming(active.value ? 1 : 0, { duration: 300 }),
@@ -170,28 +140,30 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
         }) as any,
     );
 
-    // React.useEffect(() => {
-    //     scrollTo(-SCREEN_HEIGHT/3)
-    // }, [])
     const styles = StyleSheet.create({
       container: {
         height: SCREEN_HEIGHT,
         width: "100%",
         backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-        // backgroundColor:'#efefef',
         position: "absolute",
         top: SCREEN_HEIGHT,
         borderRadius: 25,
         zIndex: 999999,
         elevation: 999999,
       },
+      handleZone: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 10,
+      },
       line: {
         width: 75,
         height: 4,
         backgroundColor: color === "#FFFFFF" ? COLORS.gray : COLORS.dark,
         borderRadius: 2,
-        marginVertical: 15,
-        alignSelf: "center",
+      },
+      content: {
+        flex: 1,
       },
       backdrop: {
         ...StyleSheet.absoluteFillObject,
@@ -206,12 +178,17 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
           style={[styles.backdrop, animatedbackdropStyle]}
           animatedProps={animatedbackdropProps}
         />
-        <GestureDetector gesture={gesture}>
-          <Animated.View style={[styles.container, animatedSheetStyle]}>
-            <Animated.View style={[styles.line, animatedhandleStyle]} />
-            {children}
-          </Animated.View>
-        </GestureDetector>
+        <Animated.View style={[styles.container, animatedSheetStyle]}>
+          {/* ── Handle: draggable zone ── */}
+          <GestureDetector gesture={gesture}>
+            <Animated.View style={[styles.handleZone, animatedhandleStyle]}>
+              <View style={styles.line} />
+            </Animated.View>
+          </GestureDetector>
+
+          {/* ── Content: free to scroll & receive text input ── */}
+          <View style={styles.content}>{children}</View>
+        </Animated.View>
       </Portal>
     );
   },
