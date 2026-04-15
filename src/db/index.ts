@@ -88,49 +88,46 @@ export async function migrate() {
     }
   }
 
-  if (__DEV__) {
-    // seed minimal default data
-    // await runSql("DELETE FROM categories;"); // reset categories (for dev/testing)
-    await seedDefaults();
-  }
+  // seed minimal default data (categories + badges) on every install
+  await seedDefaults();
 }
 
 export async function seedDefaults() {
-  // categories seed (only if empty)
-  const row = await getOne<{ c: number }>(
+  // --- Categories seed (only if empty) ---
+  const catRow = await getOne<{ c: number }>(
     "SELECT COUNT(*) as c FROM categories;",
   );
-  console.log("Categories count:", row?.c);
-  if ((row?.c ?? 0) > 0) return;
+  console.log("Categories count:", catRow?.c);
+  if ((catRow?.c ?? 0) === 0) {
+    const defaults = [
+      ["Autre dépense", "depense"],
+      ["Alimentation", "depense"],
+      ["Transport", "depense"],
+      ["Loyer", "event"],
+      ["Factures", "event"],
+      ["Abonnements", "event"],
+      ["Santé", "depense"],
+      ["Loisirs", "depense"],
+      ["Famille", "depense"],
+      ["Education", "depense"],
+      ["Shopping", "depense"],
+      ["Téléphone/Internet", "depense"],
+      ["Soin personnel", "depense"],
+      ["Salaire", "entree"],
+      ["Fond de depart", "entree"],
+      ["Frais mission", "entree"],
+      ["Autres revenus", "entree"],
+    ];
 
-  const defaults = [
-    ["Autre dépense", "depense"],
-    ["Alimentation", "depense"],
-    ["Transport", "depense"],
-    ["Loyer", "event"],
-    ["Factures", "event"],
-    ["Abonnements", "event"],
-    ["Santé", "depense"],
-    ["Loisirs", "depense"],
-    ["Famille", "depense"],
-    ["Education", "depense"],
-    ["Shopping", "depense"],
-    ["Téléphone/Internet", "depense"],
-    ["Soin personnel", "depense"],
-    ["Salaire", "entree"],
-    ["Fond de depart", "entree"],
-    ["Frais mission", "entree"],
-    ["Autres revenus", "entree"],
-  ];
-
-  for (const [name, type] of defaults) {
-    await runSql(`INSERT INTO categories (name, type) VALUES (?, ?)`, [
-      name,
-      type,
-    ]);
+    for (const [name, type] of defaults) {
+      await runSql(`INSERT INTO categories (name, type) VALUES (?, ?)`, [
+        name,
+        type,
+      ]);
+    }
   }
 
-  // badges seed
+  // --- Badges seed (always run with INSERT OR IGNORE) ---
   const badges = [
     ["FIRST_TX", "Premier mouvement", "Tu as ajouté ta première transaction."],
     ["FIRST_EXPENSE", "Première dépense", "Tu as enregistré une dépense."],
