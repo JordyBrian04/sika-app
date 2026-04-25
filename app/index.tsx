@@ -60,7 +60,6 @@ const Page = () => {
 
   const refresh = async () => {
     // await deleteUserProfile();
-    console.log(await getUserProfile());
     setUser((await getUserProfile()) ?? []);
   };
 

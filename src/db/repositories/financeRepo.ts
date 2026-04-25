@@ -24,14 +24,6 @@ export async function getPeriodiqueTotalBalance(
   let result: any;
 
   // console.log("getPeriodiqueTotalBalance", { periodeType, periodeValue });
-  if (periodeType === "weekly") {
-    console.log(
-      "periodeValue",
-      periodeValue.split(";")[0],
-      periodeValue.split(";")[1],
-    );
-  }
-
   switch (periodeType) {
     case "dayly":
       result = await getOne<{ total_income: number; total_expense: number }>(

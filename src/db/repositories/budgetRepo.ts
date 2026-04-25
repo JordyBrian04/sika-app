@@ -99,7 +99,6 @@ export async function editBudget(
 }
 
 export async function getBudgetDetailByID(id: number, periode: string) {
-  console.log("Getting budget detail for ID:", id);
   const [year, month] = periode.split("-").map(Number);
 
   const rows = await all<{

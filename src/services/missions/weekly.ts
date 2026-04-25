@@ -117,12 +117,14 @@ export async function ensureWeeklyPack(minWeekly: number): Promise<WeeklyPack> {
       `SELECT * FROM weekly_missions WHERE week_key=? ORDER BY id DESC LIMIT 1`,
       [week_key],
     );
+
+    if (!mission) throw new Error(`Failed to create weekly mission for ${week_key}`);
   }
 
   // boosts
   const boosts = await all<WeeklyBoost>(
     `SELECT * FROM weekly_boosts WHERE mission_id=? ORDER BY id ASC`,
-    [mission!.id],
+    [mission.id],
   );
 
   if (boosts.length === 0) {
@@ -132,7 +134,7 @@ export async function ensureWeeklyPack(minWeekly: number): Promise<WeeklyPack> {
          (mission_id,code,title,description,goal_amount,reward_xp,reward_coins,status)
          VALUES (?,?,?,?,?,?,?, 'active')`,
         [
-          mission!.id,
+          mission.id,
           b.code,
           b.title,
           b.description,
@@ -146,10 +148,10 @@ export async function ensureWeeklyPack(minWeekly: number): Promise<WeeklyPack> {
 
   const boosts2 = await all<WeeklyBoost>(
     `SELECT * FROM weekly_boosts WHERE mission_id=? ORDER BY id ASC`,
-    [mission!.id],
+    [mission.id],
   );
 
-  return { mission: mission!, boosts: boosts2 };
+  return { mission, boosts: boosts2 };
 }
 
 export async function getWeeklyPack(minWeekly: number) {

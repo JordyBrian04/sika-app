@@ -16,23 +16,23 @@ export type ClosureRow = {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-/** Renvoie (ou crée) l'id de la catégorie "Écart" pour le type donné */
+/** Renvoie (ou crée) l'id de la catégorie d'écart pour le type donné */
 async function getOrCreateEcartCategory(
   type: "depense" | "entree",
 ): Promise<number> {
-  const existing = await getOne<{ id: number }>(
-    `SELECT id FROM categories WHERE name = 'Écart' AND type = ?`,
-    [type],
-  );
-  if (existing) return existing.id;
+  const name = type === "entree" ? "Écart (entrée)" : "Écart (dépense)";
 
-  await runSql(`INSERT INTO categories (name, type) VALUES ('Écart', ?)`, [
-    type,
-  ]);
-  const row = await getOne<{ id: number }>(
-    `SELECT last_insert_rowid() as id;`,
+  await runSql(
+    `INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)`,
+    [name, type],
   );
-  return row!.id;
+
+  const row = await getOne<{ id: number }>(
+    `SELECT id FROM categories WHERE name = ?`,
+    [name],
+  );
+  if (!row) throw new Error(`Failed to find or create '${name}' category`);
+  return row.id;
 }
 
 /** Dernier jour du mois (ex: 2026-03-31) */
@@ -115,8 +115,9 @@ export async function closureMonth(input: {
   const row = await getOne<{ id: number }>(
     `SELECT last_insert_rowid() as id;`,
   );
+  if (!row) throw new Error("Failed to retrieve inserted closure ID");
 
-  return { closureId: row!.id, transactionId };
+  return { closureId: row.id, transactionId };
 }
 
 // ─── Annuler une clôture ─────────────────────────────────────────
