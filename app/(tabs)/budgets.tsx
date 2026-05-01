@@ -620,7 +620,7 @@ export default function TabTwoScreen() {
               </ThemedText>
               <SelectList
                 setSelected={(val: any) =>
-                  setBudgetDataset({ ...budgetDataset, mois: Number(val) })
+                  setBudgetDataset((prev: any) => ({ ...prev, mois: Number(val) }))
                 }
                 key={keyReset}
                 data={MOIS}
@@ -651,10 +651,10 @@ export default function TabTwoScreen() {
               <TextInput
                 value={budgetDataset.annee.toString()}
                 onChangeText={(text) =>
-                  setBudgetDataset({
-                    ...budgetDataset,
+                  setBudgetDataset((prev: any) => ({
+                    ...prev,
                     annee: Number(text) || new Date().getFullYear(),
-                  })
+                  }))
                 }
                 keyboardType="numeric"
                 style={{
@@ -678,7 +678,7 @@ export default function TabTwoScreen() {
             </ThemedText>
             <SelectList
               setSelected={(val: any) =>
-                setBudgetDataset({ ...budgetDataset, categorie: Number(val) })
+                setBudgetDataset((prev: any) => ({ ...prev, categorie: Number(val) }))
               }
               data={categories}
               save="key"
@@ -710,10 +710,10 @@ export default function TabTwoScreen() {
               placeholderTextColor={color}
               value={budgetDataset.montant.toString()}
               onChangeText={(text) =>
-                setBudgetDataset({
-                  ...budgetDataset,
+                setBudgetDataset((prev: any) => ({
+                  ...prev,
                   montant: text.replace(/\D/g, ""),
-                })
+                }))
               }
               keyboardType="numeric"
               style={{

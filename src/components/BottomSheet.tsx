@@ -43,25 +43,24 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
 
     React.useEffect(() => {
       const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
-        if (active.value) {
-          keyboardHeight.value = e.endCoordinates.height;
-          const dest = Math.max(
-            -SCREEN_HEIGHT / 1.5 - e.endCoordinates.height,
-            MAX_TRANSLATE_Y,
-          );
-          translateY.value = withSpring(dest, { damping: 20, stiffness: 90 });
-        }
+        if (!active.value) return;
+        const kbH = e.endCoordinates.height;
+        // Skip if keyboard height hasn't changed (avoids re-animation on every keystroke)
+        if (kbH === keyboardHeight.value) return;
+        keyboardHeight.value = kbH;
+        const dest = Math.max(
+          lastDestination.current - kbH,
+          MAX_TRANSLATE_Y,
+        );
+        translateY.value = withTiming(dest, { duration: 250 });
       });
 
       const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-        if (active.value) {
-          keyboardHeight.value = 0;
-          // Restore to the caller's last requested position
-          translateY.value = withSpring(lastDestination.current, {
-            damping: 20,
-            stiffness: 90,
-          });
-        }
+        if (!active.value) return;
+        keyboardHeight.value = 0;
+        translateY.value = withTiming(lastDestination.current, {
+          duration: 250,
+        });
       });
 
       return () => {

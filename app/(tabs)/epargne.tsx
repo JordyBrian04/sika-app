@@ -930,7 +930,7 @@ export default function TabFourScreen() {
                     }}
                     value={epargneData.name}
                     onChangeText={(e) =>
-                      setEpargneData({ ...epargneData, name: e })
+                      setEpargneData((prev) => ({ ...prev, name: e }))
                     }
                   />
                 </View>
@@ -954,7 +954,7 @@ export default function TabFourScreen() {
                     keyboardType="numeric"
                     value={epargneData.target_amount}
                     onChangeText={(e) =>
-                      setEpargneData({ ...epargneData, target_amount: e })
+                      setEpargneData((prev) => ({ ...prev, target_amount: e }))
                     }
                   />
                 </View>
@@ -978,7 +978,7 @@ export default function TabFourScreen() {
                     keyboardType="numeric"
                     value={epargneData.current_amount}
                     onChangeText={(e) =>
-                      setEpargneData({ ...epargneData, current_amount: e })
+                      setEpargneData((prev) => ({ ...prev, current_amount: e }))
                     }
                   />
                 </View>

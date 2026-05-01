@@ -204,10 +204,10 @@ export default function HomeScreen() {
         toggleDatePicker();
 
         //On attribu la date à la valeur date (currentDate.toLocaleDateString('fr-FR'))
-        setTransactionData({
-          ...transactionData,
+        setTransactionData((prev) => ({
+          ...prev,
           date: currentDate.toISOString().substring(0, 10),
-        });
+        }));
         // setTache({
         //   ...tache,
         //   date: currentDate.toLocaleDateString('fr-FR', options)
@@ -220,10 +220,10 @@ export default function HomeScreen() {
 
   const confirmIOSDate = () => {
     // console.log(date.toISOString().substring(0, 10));
-    setTransactionData({
-      ...transactionData,
+    setTransactionData((prev) => ({
+      ...prev,
       date: date.toISOString().substring(0, 10),
-    });
+    }));
     toggleDatePicker();
   };
 
@@ -459,7 +459,7 @@ export default function HomeScreen() {
       ? ref.current?.scrollTo(MAX_TRANSLATE_Y)
       : ref.current?.scrollTo(-500);
     setKeyReset((prev) => prev + 1);
-    setTransactionData({ ...transactionData, type: type, category_id: 0 });
+    setTransactionData((prev) => ({ ...prev, type: type, category_id: 0 }));
     setOption(type);
     setCategories(
       OldCategories.filter((c) => c.type === type).map((c) => ({
@@ -525,10 +525,10 @@ export default function HomeScreen() {
   });
 
   const toggleSwitch = () =>
-    setTransactionData({
-      ...transactionData,
-      active: transactionData.active === 1 ? 0 : 1,
-    });
+    setTransactionData((prev) => ({
+      ...prev,
+      active: prev.active === 1 ? 0 : 1,
+    }));
 
   const manualPay = async (id: number) => {
     setSelectedId(id);
@@ -1388,10 +1388,10 @@ export default function HomeScreen() {
                 }}
                 placeholderTextColor={color}
                 onChangeText={(e) =>
-                  setTransactionData({
-                    ...transactionData,
+                  setTransactionData((prev) => ({
+                    ...prev,
                     amount: e,
-                  })
+                  }))
                 }
                 value={transactionData.amount}
               />
@@ -1412,10 +1412,10 @@ export default function HomeScreen() {
                     data={categories}
                     key={keyReset}
                     setSelected={(val: string) =>
-                      setTransactionData({
-                        ...transactionData,
+                      setTransactionData((prev) => ({
+                        ...prev,
                         category_id: parseInt(val),
-                      })
+                      }))
                     }
                     placeholder="Choisir une catégorie"
                     inputStyles={{
@@ -1524,10 +1524,10 @@ export default function HomeScreen() {
                           editable={false}
                           value={transactionData.date}
                           onChangeText={(e: any) =>
-                            setTransactionData({
-                              ...transactionData,
+                            setTransactionData((prev) => ({
+                              ...prev,
                               date: e,
-                            })
+                            }))
                           }
                           onPressIn={toggleDatePicker}
                         />
@@ -1557,7 +1557,7 @@ export default function HomeScreen() {
                     }}
                     value={transactionData.note}
                     onChangeText={(e) =>
-                      setTransactionData({ ...transactionData, note: e })
+                      setTransactionData((prev) => ({ ...prev, note: e }))
                     }
                   />
                 </View>
@@ -1587,7 +1587,7 @@ export default function HomeScreen() {
                     }}
                     value={transactionData.name}
                     onChangeText={(e) =>
-                      setTransactionData({ ...transactionData, name: e })
+                      setTransactionData((prev) => ({ ...prev, name: e }))
                     }
                   />
                 </View>
@@ -1599,10 +1599,10 @@ export default function HomeScreen() {
                     data={categories}
                     key={keyReset}
                     setSelected={(val: string) =>
-                      setTransactionData({
-                        ...transactionData,
+                      setTransactionData((prev) => ({
+                        ...prev,
                         category_id: parseInt(val),
-                      })
+                      }))
                     }
                     placeholder="Choisir une catégorie"
                     inputStyles={{ color: color }}
@@ -1649,10 +1649,10 @@ export default function HomeScreen() {
                       }}
                       maxLength={3}
                       onChangeText={(e) =>
-                        setTransactionData({
-                          ...transactionData,
+                        setTransactionData((prev) => ({
+                          ...prev,
                           interval_count: e,
-                        })
+                        }))
                       }
                       value={transactionData.interval_count.toString()}
                     />
@@ -1664,10 +1664,10 @@ export default function HomeScreen() {
                       }))}
                       key={keyReset}
                       setSelected={(val: string) =>
-                        setTransactionData({
-                          ...transactionData,
+                        setTransactionData((prev) => ({
+                          ...prev,
                           frequency: val as Frequency,
-                        })
+                        }))
                       }
                       placeholder="Choisir une fréquence"
                       inputStyles={{
@@ -1778,10 +1778,10 @@ export default function HomeScreen() {
                           editable={false}
                           value={transactionData.date}
                           onChangeText={(e: any) =>
-                            setTransactionData({
-                              ...transactionData,
+                            setTransactionData((prev) => ({
+                              ...prev,
                               date: e,
-                            })
+                            }))
                           }
                           onPressIn={toggleDatePicker}
                         />
@@ -1810,10 +1810,10 @@ export default function HomeScreen() {
                           borderRadius: 10,
                         }}
                         onPress={() =>
-                          setTransactionData({
-                            ...transactionData,
+                          setTransactionData((prev) => ({
+                            ...prev,
                             remind_days_before: preset,
-                          })
+                          }))
                         }
                       >
                         <ThemedText
