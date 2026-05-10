@@ -3,7 +3,8 @@ import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { FONT_FAMILY } from "@/src/theme/fonts";
-import { formatMoney } from "@/src/utils/format";
+import { formatMoney, displayMoney } from "@/src/utils/format";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { AntDesign, Feather, MaterialIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
@@ -21,6 +22,7 @@ const formatDate = (dateString: string) => {
 
 const DetailTransactions = () => {
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount } = useCurrency();
   const { id, amount, note, date, name, type, created_at }: any =
     useLocalSearchParams();
   console.log("Transaction details:", {
@@ -72,8 +74,8 @@ const DetailTransactions = () => {
               }}
             >
               {type === "depense"
-                ? `-${formatMoney(amount)} CFA`
-                : `${formatMoney(amount)} CFA`}
+                ? `-${displayAmount(amount)}`
+                : `${displayAmount(amount)}`}
             </Text>
             <View
               style={{

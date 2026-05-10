@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.brianjordy.sikaapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "usesIcloudStorage": true
     },
     "android": {
       "adaptiveIcon": {
@@ -54,8 +59,46 @@
       "expo-font",
       "expo-sqlite",
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      // [
+      //   "expo-sharing",
+      //   {
+      //     "ios": {
+      //       "enabled": true,
+      //       "activationRule": {
+      //         "supportsImageWithMaxCount": 5
+      //       }
+      //     },
+      //     "android": {
+      //       "enabled": true,
+      //       "singleShareMimeTypes": ["image/*"],
+      //       "multipleShareMimeTypes": ["image/*"]
+      //     }
+      //   }
+      // ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Development"
+        }
+      ],
+      [
+        "expo-file-system",
+        {
+          "supportsOpeningDocumentsInPlace": true,
+          "enableFileSharing": true
+        }
+      ]
     ],
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/5f0eb089-138c-4a0d-84d1-430a292781aa"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
@@ -63,7 +106,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "4ee9db22-7b00-4ed4-a697-374e9c28fb18"
+        "projectId": "5f0eb089-138c-4a0d-84d1-430a292781aa"
       }
     }
   }

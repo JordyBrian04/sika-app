@@ -335,7 +335,7 @@ export async function getTransactionsByPeriodAndCategory(
 ) {
   let result: any;
   const categories = await all<CategoryInput>(
-    `SELECT id, name FROM categories WHERE type='depense' ORDER BY name ASC`,
+    `SELECT id, name FROM categories WHERE type IN ('depense', 'event') ORDER BY name ASC`,
   );
   const pieDatas: any = [];
   let maxPercent = -1;
@@ -355,7 +355,7 @@ export async function getTransactionsByPeriodAndCategory(
         };
 
         result = await getOne<{ total: number }>(
-          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type='depense' AND date = ? AND category_id = ?`,
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type IN ('depense', 'event') AND date = ? AND category_id = ?`,
           [periodeValue, cat.id],
         );
 
@@ -401,7 +401,7 @@ export async function getTransactionsByPeriodAndCategory(
         };
 
         result = await getOne<{ total: number }>(
-          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type='depense' AND date >= ? AND date <= ? AND category_id = ?`,
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type IN ('depense', 'event') AND date >= ? AND date <= ? AND category_id = ?`,
           [
             start.toISOString().slice(0, 10),
             end.toISOString().slice(0, 10),
@@ -456,7 +456,7 @@ export async function getTransactionsByPeriodAndCategory(
         };
 
         result = await getOne<{ total: number }>(
-          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type='depense' AND strftime('%m', date) = ? AND strftime('%Y', date) = ? AND category_id = ?`,
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type IN ('depense', 'event') AND strftime('%m', date) = ? AND strftime('%Y', date) = ? AND category_id = ?`,
           [month.toString().padStart(2, "0"), year.toString(), cat.id],
         );
 
@@ -499,7 +499,7 @@ export async function getTransactionsByPeriodAndCategory(
         };
 
         result = await getOne<{ total: number }>(
-          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type='depense' AND strftime('%Y', date) = ? AND category_id = ?`,
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type IN ('depense', 'event') AND strftime('%Y', date) = ? AND category_id = ?`,
           [periodeValue.toString(), cat.id],
         );
 

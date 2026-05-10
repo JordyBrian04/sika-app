@@ -14,24 +14,16 @@ export async function runSql(
   sql: string,
   params: SQLParams = [],
 ): Promise<void> {
-  const database = await getDb();
-  return new Promise(async (resolve, reject) => {
-    await database
-      .runAsync(sql, params)
-      .then(() => resolve())
-      .catch(reject);
-    // database.transaction((tx) => {
-    //   tx.executeSql(
-    //     sql,
-    //     params as any,
-    //     () => resolve(),
-    //     (_tx, err) => {
-    //       reject(err);
-    //       return true;
-    //     }
-    //   );
-    // });
-  });
+  // const database = await getDb();
+  try {
+    const database = await getDb();
+
+    await database.runAsync(sql, params);
+
+  } catch (error) {
+    console.error("SQL ERROR:", error);
+    throw error;
+  }
 }
 
 export async function all<T = any>(
@@ -82,7 +74,25 @@ export async function migrate() {
       if (!steps) continue;
 
       for (const step of steps) {
-        await runSql(step);
+        try {
+          await runSql(step);
+        } catch (e: any) {
+          const msg: string = e?.message ?? "";
+          // ALTER TABLE ADD COLUMN est non-idempotent en SQLite.
+          // Cas 1 : colonne déjà présente (migration partiellement appliquée)
+          if (msg.includes("duplicate column name")) {
+            console.warn(`[migrate] colonne déjà existante, ignoré : ${msg}`);
+            continue;
+          }
+          // Cas 2 : default non-constant (ex: DEFAULT (datetime('now')))
+          // → impossible dans ALTER TABLE, on continue sans default
+          if (msg.includes("non-constant default") || msg.includes("Cannot add a column with non-constant default")) {
+            console.warn(`[migrate] default non-constant ignoré : ${msg}`);
+            continue;
+          }
+          // Toute autre erreur est fatale
+          throw e;
+        }
       }
       await runSql(`PRAGMA user_version = ${v};`);
     }

@@ -14,8 +14,8 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useCurrency } from "../context/CurrencyContext";
 import { Category } from "../utils/constants";
-import { formatMoney } from "../utils/format";
 import Button from "./Button";
 
 interface AccordionProps {
@@ -28,6 +28,7 @@ const Accordion: FC<AccordionProps> = ({ categorie, onAccordionOpen }) => {
   const contentRef = useAnimatedRef<View>();
   const contentHeight = useSharedValue(0);
   const isOpen = useSharedValue(false);
+  const { displayAmount } = useCurrency();
 
   const contentAnimationStyle = useAnimatedStyle(() => ({
     height: contentHeight.value,
@@ -189,7 +190,7 @@ const Accordion: FC<AccordionProps> = ({ categorie, onAccordionOpen }) => {
                     >
                       {renderDot(item.color)}
                       <ThemedText style={{ fontSize: 14 }}>
-                        {item.label} : {formatMoney(item.amount)} CFA soit{" "}
+                        {item.label} : {displayAmount(item.amount)} soit{" "}
                         {item.value}%
                       </ThemedText>
                     </View>

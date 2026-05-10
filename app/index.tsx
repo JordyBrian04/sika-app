@@ -26,11 +26,17 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { isCloudAuthenticated } from "../src/services/cloud/authService";
 import {
   createOrUpdateUserProfile,
   getUserProfile,
   UserProfile,
 } from "../src/db/repositories/userRepo";
+import { runSql } from "../src/db";
+import {
+  SETUP_CURRENCIES,
+  type Currency,
+} from "../src/services/currency/currencyService";
 
 const Page = () => {
   const [code, setCode] = useState<number[]>([]);
@@ -44,6 +50,11 @@ const Page = () => {
   const offset = useSharedValue(0);
   const { openModal, closeModal, isVisible } = useModalQueue();
   const [loading, setLoading] = useState(false);
+  const [setupCurrency, setSetupCurrency] = useState<Currency>("XOF");
+
+  // Biometric availability state
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricType, setBiometricType] = useState<number[]>([]);
 
   const style = useAnimatedStyle(() => {
     return {
@@ -63,8 +74,25 @@ const Page = () => {
     setUser((await getUserProfile()) ?? []);
   };
 
+  // Check biometric availability on mount
+  const checkBiometric = async () => {
+    try {
+      const hasHardware = await LocalAuthentification.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentification.isEnrolledAsync();
+      setBiometricAvailable(hasHardware && isEnrolled);
+      if (hasHardware && isEnrolled) {
+        const types =
+          await LocalAuthentification.supportedAuthenticationTypesAsync();
+        setBiometricType(types);
+      }
+    } catch {
+      setBiometricAvailable(false);
+    }
+  };
+
   useEffect(() => {
     refresh();
+    checkBiometric();
   }, []);
 
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
@@ -101,10 +129,18 @@ const Page = () => {
   };
 
   const onBiometricPress = async () => {
-    const { success } = await LocalAuthentification.authenticateAsync();
-    if (success) {
-      router.navigate("/(tabs)");
-    } else {
+    try {
+      const { success } = await LocalAuthentification.authenticateAsync({
+        promptMessage: "Déverrouiller Sika App",
+        cancelLabel: "Annuler",
+        disableDeviceFallback: false,
+      });
+      if (success) {
+        router.navigate("/(tabs)");
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
@@ -114,20 +150,26 @@ const Page = () => {
       return alert("Le nom ne peut pas être vide.");
 
     setLoading(true);
-    await createOrUpdateUserProfile(
-      code.join(""),
-      userInput.name.trim(),
-      userInput.gender.trim(),
-    )
-      .then(() => {
-        router.navigate("/(tabs)");
-        closeModal();
-      })
-      .catch((e) => {
-        console.error("Error creating/updating user profile", e);
-        alert("Une erreur est survenue. Veuillez réessayer.");
-      })
-      .finally(() => setLoading(false));
+    try {
+      await createOrUpdateUserProfile(
+        code.join(""),
+        userInput.name.trim(),
+        userInput.gender.trim(),
+      );
+      // Sauvegarder la devise choisie au setup
+      await runSql(
+        `UPDATE user_profile SET default_currency = ?, currency_locked = 0 WHERE id = 1`,
+        [setupCurrency]
+      );
+      closeModal();
+      // Nouveau profil → proposer la sync cloud avant d'aller dans l'app
+      router.navigate("/(screens)/CloudSignup" as any);
+    } catch (e) {
+      console.error("Error creating/updating user profile", e);
+      alert("Une erreur est survenue. Veuillez réessayer.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   function nameModal() {
@@ -239,6 +281,36 @@ const Page = () => {
                       >
                         {g.label}
                       </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Sélecteur de devise (premier lancement) */}
+              <View>
+                <ThemedText style={{ fontFamily: "SemiBold", color: color, fontSize: 18 }}>
+                  Devise principale
+                </ThemedText>
+                <Text style={{ fontSize: 12, color: "gray", marginTop: 4, marginBottom: 10 }}>
+                  Tous les montants seront affichés dans cette devise.
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {SETUP_CURRENCIES.map((c) => (
+                    <TouchableOpacity
+                      key={c.key}
+                      onPress={() => setSetupCurrency(c.key)}
+                      style={{
+                        flexDirection: "row", alignItems: "center", gap: 6,
+                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                        borderWidth: 1.5,
+                        borderColor: setupCurrency === c.key ? "#265ed7" : "gray",
+                        backgroundColor: setupCurrency === c.key ? "#265ed720" : "transparent",
+                      }}
+                    >
+                      <Text style={{ fontSize: 16 }}>{c.flag}</Text>
+                      <Text style={{ fontSize: 13, fontFamily: "SemiBold", color: setupCurrency === c.key ? "#265ed7" : color }}>
+                        {c.label}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -443,7 +515,7 @@ const Page = () => {
             }}
           >
             <View style={{ minWidth: 30 }}>
-              {user.length > 0 && (
+              {user.length > 0 && biometricAvailable && (
                 <TouchableOpacity
                   style={{
                     padding: 10,
@@ -453,7 +525,13 @@ const Page = () => {
                   onPress={onBiometricPress}
                 >
                   <MaterialCommunityIcons
-                    name="face-recognition"
+                    name={
+                      biometricType.includes(
+                        LocalAuthentification.AuthenticationType.FACIAL_RECOGNITION,
+                      )
+                        ? "face-recognition"
+                        : "fingerprint"
+                    }
                     size={24}
                     color={color}
                   />

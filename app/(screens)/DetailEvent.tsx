@@ -15,7 +15,8 @@ import {
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { useAppTextColor } from "@/src/utils/colos";
-import { formatMoney } from "@/src/utils/format";
+import { formatMoney, displayMoney } from "@/src/utils/format";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { toYYYYMMDD } from "@/src/utils/goalDates";
 import {
   AntDesign,
@@ -44,6 +45,7 @@ import {
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 
 const REMIND_PRESETS = [0, 1, 2, 3, 7];
 
@@ -64,6 +66,7 @@ const DetailEvent = () => {
 
   //   console.log(remind_days_before, active, category_name);
   const color = useAppTextColor();
+  const { displayAmount } = useCurrency();
   const [loading, setLoading] = React.useState(false);
   const [transactions, setTransactions] = React.useState<any[]>([]);
   const [transactionData, setTransactionData] = useState({
@@ -145,7 +148,7 @@ const DetailEvent = () => {
     try {
       await updateRecurringPayment(transactionData.id, {
         name: transactionData.name,
-        amount: parseInt(transactionData.amount),
+        amount: parseFloat(transactionData.amount),
         frequency: transactionData.frequency,
         category_id: transactionData.category_id,
         next_date: transactionData.next_date,
@@ -314,7 +317,7 @@ const DetailEvent = () => {
           //   color === "#FFFFFF" ? COLORS.dark : COLORS.white,
         }}
       >
-        {formatMoney(item.amount)} CFA
+        {displayAmount(item.amount)}
       </ThemedText>
     </TouchableOpacity>
   );
@@ -424,9 +427,7 @@ const DetailEvent = () => {
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ fontFamily: FONT_FAMILY.regular }}>
-                    Montant (CFA)
-                  </Text>
+                  <Text style={{ fontFamily: FONT_FAMILY.regular }}>{`Montant (${getSymbol()})`}</Text>
                   <TextInput
                     placeholder="0"
                     keyboardType="numeric"
@@ -807,7 +808,7 @@ const DetailEvent = () => {
                 fontFamily: FONT_FAMILY.bold,
               }}
             >
-              {formatMoney(amount)} CFA
+              {displayAmount(amount)}
             </ThemedText>
 
             <View

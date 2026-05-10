@@ -25,7 +25,22 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
+    }
+  },
+  "update": {
+    "production": {
+      "channel": "production",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
+    },
+    "preview": {
+      "channel": "preview"
+    },
+    "development": {
+      "channel": "development"
     }
   },
   "submit": {

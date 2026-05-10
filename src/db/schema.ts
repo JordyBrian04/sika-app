@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 2;
+export const DB_VERSION = 7;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -250,5 +250,139 @@ ON goal_contributions(goal_id, date);`,
       UNIQUE(month, year)                      -- une seule clôture par mois
     );`,
     `CREATE INDEX IF NOT EXISTS idx_closures_month_year ON closures(month, year);`,
+  ],
+
+  // ── Migration 3 : colonnes cloud auth + sync ──────────────────────────────
+  // user_profile : stockage des tokens et du plan Pro
+  // Toutes les tables syncables : sync_id, sync_status, updated_at, deleted_at
+  3: [
+    // user_profile — colonnes cloud
+    `ALTER TABLE user_profile ADD COLUMN cloud_user_id TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN cloud_phone TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN cloud_email TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN access_token TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN refresh_token TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN token_expires_at INTEGER;`,   // unix timestamp (seconds)
+    `ALTER TABLE user_profile ADD COLUMN plan TEXT NOT NULL DEFAULT 'free';`,
+    `ALTER TABLE user_profile ADD COLUMN plan_expires_at TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN last_sync_at TEXT;`,
+    `ALTER TABLE user_profile ADD COLUMN device_id TEXT;`,
+
+    // categories
+    `ALTER TABLE categories ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE categories ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE categories ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE categories ADD COLUMN deleted_at TEXT;`,
+
+    // transactions
+    `ALTER TABLE transactions ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE transactions ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE transactions ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE transactions ADD COLUMN deleted_at TEXT;`,
+
+    // budgets
+    `ALTER TABLE budgets ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE budgets ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE budgets ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE budgets ADD COLUMN deleted_at TEXT;`,
+
+    // recurring_payments
+    `ALTER TABLE recurring_payments ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE recurring_payments ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE recurring_payments ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE recurring_payments ADD COLUMN deleted_at TEXT;`,
+
+    // saving_goals
+    `ALTER TABLE saving_goals ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE saving_goals ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE saving_goals ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE saving_goals ADD COLUMN deleted_at TEXT;`,
+
+    // goal_contributions
+    `ALTER TABLE goal_contributions ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE goal_contributions ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE goal_contributions ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE goal_contributions ADD COLUMN deleted_at TEXT;`,
+
+    // goal_rules
+    `ALTER TABLE goal_rules ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE goal_rules ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE goal_rules ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE goal_rules ADD COLUMN deleted_at TEXT;`,
+
+    // goal_streaks
+    `ALTER TABLE goal_streaks ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE goal_streaks ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE goal_streaks ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE goal_streaks ADD COLUMN deleted_at TEXT;`,
+
+    // closures
+    `ALTER TABLE closures ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE closures ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE closures ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE closures ADD COLUMN deleted_at TEXT;`,
+
+    // recurring_notification_links
+    `ALTER TABLE recurring_notification_links ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE recurring_notification_links ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE recurring_notification_links ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE recurring_notification_links ADD COLUMN deleted_at TEXT;`,
+
+    // recurring_due_queue
+    `ALTER TABLE recurring_due_queue ADD COLUMN sync_id TEXT;`,
+    `ALTER TABLE recurring_due_queue ADD COLUMN sync_status INTEGER NOT NULL DEFAULT 1;`,
+    `ALTER TABLE recurring_due_queue ADD COLUMN updated_at TEXT;`,
+    `ALTER TABLE recurring_due_queue ADD COLUMN deleted_at TEXT;`,
+
+    // Générer un UUID pour tous les enregistrements existants (format compatible)
+    // SQLite n'a pas gen_random_uuid(), on utilise lower(hex(randomblob(16))) comme UUID v4 approché
+    `UPDATE categories    SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+    `UPDATE transactions  SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+    `UPDATE budgets       SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+    `UPDATE recurring_payments SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+    `UPDATE saving_goals  SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+    `UPDATE goal_contributions SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+    `UPDATE closures      SET sync_id = lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))) WHERE sync_id IS NULL;`,
+  ],
+
+  // ── Migration 4 : multi-monnaies + listBadgesWithStatus ──────────────────
+  4: [
+    // Cache des taux de change (JSON) pour le service multi-monnaies
+    `ALTER TABLE user_profile ADD COLUMN currency_rates TEXT;`,
+    // Devise globale de l'application
+    `ALTER TABLE user_profile ADD COLUMN default_currency TEXT NOT NULL DEFAULT 'XOF';`,
+  ],
+
+  // ── Migration 5 : verrou devise (gratuit = 1 changement max) ─────────────
+  5: [
+    // 0 = non verrouillé, 1 = verrouillé (gratuit a déjà changé une fois)
+    `ALTER TABLE user_profile ADD COLUMN currency_locked INTEGER NOT NULL DEFAULT 0;`,
+  ],
+
+  // ── Migration 7 : table weekly_boost_logs ────────────────────────────────
+  // Évite de valider plusieurs fois le même boost le même jour (ex: NO_SPEND_DAY)
+  7: [
+    `CREATE TABLE IF NOT EXISTS weekly_boost_logs (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      boost_id INTEGER NOT NULL,
+      day      TEXT NOT NULL,              -- 'YYYY-MM-DD'
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(boost_id, day),
+      FOREIGN KEY(boost_id) REFERENCES weekly_boosts(id) ON DELETE CASCADE
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_weekly_boost_logs_boost_day
+     ON weekly_boost_logs(boost_id, day);`,
+  ],
+
+  // ── Migration 6 : montants décimaux ───────────────────────────────────────
+  // SQLite stocke automatiquement les REAL dans les colonnes INTEGER si on insère
+  // une valeur décimale. Cette migration ne fait rien structurellement, mais elle
+  // signale que l'app supporte désormais les montants à virgule (ex: 8,33 $).
+  // Le code utilise parseFloat() au lieu de parseInt() pour les saisies.
+  6: [
+    // Convertir les colonnes amount en REAL dans SQLite n'est pas possible via
+    // ALTER TABLE. SQLite accepte les décimaux dans les colonnes INTEGER grâce
+    // à son typage dynamique. Aucune migration SQL n'est nécessaire.
+    `SELECT 1; -- migration 6 : montants décimaux activés (parseFloat côté app)`,
   ],
 };

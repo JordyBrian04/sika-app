@@ -20,7 +20,8 @@ import {
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { toYYYYMMDD } from "@/src/utils/date";
-import { formatMoney } from "@/src/utils/format";
+import { formatMoney, displayMoney } from "@/src/utils/format";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import {
   AntDesign,
   Feather,
@@ -50,6 +51,7 @@ import {
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 
 const formatDate = (dateString: string) => {
   const options: Intl.DateTimeFormatOptions = {
@@ -64,6 +66,7 @@ const REMIND_PRESETS = [0, 1, 2, 3, 7];
 
 const IncomingEvent = () => {
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount } = useCurrency();
   const [keyReset, setKeyReset] = useState(0);
   const [paiementsEnRetard, setPaiementsEnRetard] = React.useState<any[]>([]);
   const [paiementsAvenir, setPaiementsAvenir] = React.useState<any[]>([]);
@@ -275,7 +278,7 @@ const IncomingEvent = () => {
         </View>
 
         <ThemedText style={{ fontFamily: FONT_FAMILY.bold }}>
-          {formatMoney(item.amount)} CFA
+          {displayAmount(item.amount)}
         </ThemedText>
       </View>
 
@@ -473,7 +476,7 @@ const IncomingEvent = () => {
 
             <View style={{ gap: 5 }}>
               <ThemedText style={{ fontFamily: FONT_FAMILY.bold }}>
-                {formatMoney(trans.amount)} CFA
+                {displayAmount(trans.amount)}
               </ThemedText>
               <Text
                 style={{
@@ -552,7 +555,7 @@ const IncomingEvent = () => {
     try {
       await updateRecurringPayment(transactionData.id, {
         name: transactionData.name,
-        amount: parseInt(transactionData.amount),
+        amount: parseFloat(transactionData.amount),
         frequency: transactionData.frequency,
         category_id: transactionData.category_id,
         next_date: transactionData.next_date,
@@ -655,9 +658,7 @@ const IncomingEvent = () => {
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ fontFamily: FONT_FAMILY.regular }}>
-                    Montant (CFA)
-                  </Text>
+                  <Text style={{ fontFamily: FONT_FAMILY.regular }}>{`Montant (${getSymbol()})`}</Text>
                   <TextInput
                     placeholder="0"
                     keyboardType="numeric"

@@ -30,7 +30,8 @@ import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { useAppTextColor } from "@/src/utils/colos";
 import { toYYYYMMDD } from "@/src/utils/date";
-import { formatMoney } from "@/src/utils/format";
+import { displayMoney } from "@/src/utils/format";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { diffDays } from "@/src/utils/goalDates";
 import {
   AntDesign,
@@ -63,6 +64,7 @@ import {
 } from "react-native";
 import { BarChart } from "react-native-gifted-charts";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const R = 70;
@@ -71,6 +73,7 @@ const STROKE_WIDTH = 14;
 const DetailGoal = () => {
   const { id } = useLocalSearchParams();
   const color = useAppTextColor();
+  const { displayAmount } = useCurrency();
   const [goals, setGoals] = React.useState<any>(null);
   const [goalDetails, setGoalDetails] = React.useState<any>(null);
   const [goalProjections, setGoalProjections] = React.useState<any>(null);
@@ -241,7 +244,6 @@ const DetailGoal = () => {
   };
 
   useEffect(() => {
-    console.log("epargneData", epargneData);
     if (
       epargneData.target_date === epargneData.start_date ||
       new Date(epargneData.target_date) < new Date(epargneData.start_date)
@@ -258,13 +260,9 @@ const DetailGoal = () => {
     );
     const totalWeeks = Math.max(Math.ceil(totalDays / 7), 1);
 
-    console.log("totalWeeks", totalWeeks);
-    console.log("totalDays", totalDays);
-    console.log("totalMonth", Math.max(Math.ceil(totalWeeks / 4), 1));
-
     const remainingAmount =
-      parseInt(epargneData.target_amount) -
-      parseInt(epargneData.current_amount);
+      parseFloat(epargneData.target_amount) -
+      parseFloat(epargneData.current_amount);
     const minWeekly = Math.ceil(remainingAmount / totalWeeks);
     const minDayly = Math.ceil(remainingAmount / totalDays);
     const minMonthly = Math.ceil(
@@ -297,10 +295,10 @@ const DetailGoal = () => {
   const handleSave = async () => {
     if (
       !epargneData.name ||
-      parseInt(epargneData.target_amount) <= 0 ||
+      parseFloat(epargneData.target_amount) <= 0 ||
       !epargneData.target_date ||
       !epargneData.start_date ||
-      parseInt(epargneData.min_weekly) <= 0
+      parseFloat(epargneData.min_weekly) <= 0
     ) {
       // Handle the case where some fields are missing
       alert("Veuillez remplir tous les champs correctement.");
@@ -311,10 +309,10 @@ const DetailGoal = () => {
     try {
       await updateGoal(id as any, {
         name: epargneData.name, // You should replace this with the actual goal ID
-        target_amount: parseInt(epargneData.target_amount),
+        target_amount: parseFloat(epargneData.target_amount),
         target_date: epargneData.target_date,
         priority: epargneData.priority as any,
-        min_weekly: parseInt(epargneData.min_weekly),
+        min_weekly: parseFloat(epargneData.min_weekly),
         frequence: epargneData.frequence as any,
       });
 
@@ -337,7 +335,7 @@ const DetailGoal = () => {
   };
 
   const handleSaveContribution = async () => {
-    if (!contribution.amount || parseInt(contribution.amount) <= 0) {
+    if (!contribution.amount || parseFloat(contribution.amount) <= 0) {
       alert("Veuillez entrer un montant valide.");
       return;
     }
@@ -346,7 +344,7 @@ const DetailGoal = () => {
     try {
       await addContribution({
         goal_id: id as any, // You should replace this with the actual goal ID
-        amount: parseInt(contribution.amount),
+        amount: parseFloat(contribution.amount),
         date: contribution.date,
         source: "manual",
       });
@@ -354,7 +352,7 @@ const DetailGoal = () => {
       const cat = await listeCategories();
 
       await addTransaction({
-        amount: parseInt(contribution.amount),
+        amount: parseFloat(contribution.amount),
         type: "depense",
         date: toYYYYMMDD(new Date()),
         note: `Contribution sur l'épargne : ${goals.name}`,
@@ -432,11 +430,9 @@ const DetailGoal = () => {
     setLoading(true);
     const goals = await getGoal(id as any);
     setGoals(goals);
-    console.log("goal", goals);
 
     const details = await getGoalPlan(id as any);
     setGoalDetails(details);
-    console.log("goalDetails", details);
     setEpargneData({
       id: id as any,
       name: goals?.name ?? "",
@@ -598,7 +594,7 @@ const DetailGoal = () => {
           color: COLORS.green,
         }}
       >
-        {formatMoney(item.amount)} CFA
+        {displayAmount(item.amount)}
       </Text>
     </TouchableOpacity>
   );
@@ -759,9 +755,7 @@ const DetailGoal = () => {
                       <View style={{ gap: 8 }}>
                         <ThemedText
                           style={{ fontFamily: FONT_FAMILY.semibold }}
-                        >
-                          Montant cible (CFA)
-                        </ThemedText>
+                        >{`Montant cible (${getSymbol()})`}</ThemedText>
                         <TextInput
                           placeholder="Ex: 200 000"
                           placeholderTextColor={COLORS.gray}
@@ -1150,7 +1144,7 @@ const DetailGoal = () => {
                               }}
                             >
                               Epargne journalière :{" "}
-                              {formatMoney(periodeDAtats.min_dayly as any)} CFA
+                              {displayAmount(periodeDAtats.min_dayly as any)}
                             </Text>
                           </TouchableOpacity>
 
@@ -1211,7 +1205,7 @@ const DetailGoal = () => {
                               }}
                             >
                               Epargne hebdomadaire :{" "}
-                              {formatMoney(periodeDAtats.min_weekly as any)} CFA
+                              {displayAmount(periodeDAtats.min_weekly as any)}
                             </Text>
                           </TouchableOpacity>
 
@@ -1273,8 +1267,7 @@ const DetailGoal = () => {
                               }}
                             >
                               Epargne mensuelle :{" "}
-                              {formatMoney(periodeDAtats.min_monthly as any)}{" "}
-                              CFA
+                              {displayAmount(periodeDAtats.min_monthly as any)}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -1482,9 +1475,7 @@ const DetailGoal = () => {
                           justifyContent: "center",
                         }}
                       >
-                        <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-                          Montant (CFA)
-                        </ThemedText>
+                        <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>{`Montant (${getSymbol()})`}</ThemedText>
                         <TextInput
                           placeholder="0"
                           keyboardType="numeric"
@@ -1731,20 +1722,20 @@ const DetailGoal = () => {
               gap: 18,
             }}
           >
-            <CircularProgressBar
-              radius={R}
-              strokeWidth={STROKE_WIDTH}
-              percentage={calculatePercentage(
+            {(() => {
+              const pct = calculatePercentage(
                 goalDetails?.saved_amount,
                 goals?.target_amount,
-              )}
-              end={
-                calculatePercentage(
-                  goalDetails?.saved_amount,
-                  goals?.target_amount,
-                ) / 100
-              }
-            />
+              );
+              return (
+                <CircularProgressBar
+                  radius={R}
+                  strokeWidth={STROKE_WIDTH}
+                  percentage={pct}
+                  end={pct / 100}
+                />
+              );
+            })()}
 
             <ThemedText style={{ fontSize: 18, fontFamily: FONT_FAMILY.bold }}>
               {goals ? goals.name : " "}
@@ -1766,7 +1757,7 @@ const DetailGoal = () => {
               <ThemedText
                 style={{ fontSize: 20, fontFamily: FONT_FAMILY.bold }}
               >
-                {formatMoney(goalDetails?.remaining_amount)} CFA
+                {displayAmount(goalDetails?.remaining_amount)}
               </ThemedText>
             </View>
 
@@ -1860,7 +1851,7 @@ const DetailGoal = () => {
                     color: COLORS.gray,
                   }}
                 >
-                  {formatMoney(goals.min_weekly)} CFA /{" "}
+                  {displayAmount(goals.min_weekly)} /{" "}
                   {goals.frequence === "weekly"
                     ? "semaine"
                     : goals.frequence === "monthly"
@@ -2022,12 +2013,12 @@ const DetailGoal = () => {
                     fontSize: 17,
                   }}
                 >
-                  VITESSE D'EPARGNE
+                  VITESSE D`EPARGNE
                 </Text>
                 <ThemedText
                   style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22 }}
                 >
-                  Moy. {formatMoney(goalDetails.weeklyRate)}{" "}
+                  Moy. {displayAmount(goalDetails.weeklyRate)}{" "}
                   <Text
                     style={{
                       fontFamily: FONT_FAMILY.medium,
@@ -2035,8 +2026,7 @@ const DetailGoal = () => {
                       color: COLORS.gray,
                     }}
                   >
-                    {" "}
-                    CFA / sem.
+                    {`${getSymbol()} / sem.`}
                   </Text>
                 </ThemedText>
               </View>
@@ -2254,7 +2244,7 @@ const DetailGoal = () => {
                   fontSize: 12,
                 }}
               >
-                Supprimer l'épargne
+                Supprimer l`épargne
               </Text>
             </TouchableOpacity>
           </View>

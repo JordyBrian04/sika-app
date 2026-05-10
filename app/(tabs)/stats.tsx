@@ -5,6 +5,8 @@ import { COLORS } from "@/components/ui/color";
 import Accordion from "@/src/components/Accordion";
 import ExpenseCalendar60Days from "@/src/components/ExpenseCalendar60Days";
 import PieChartRender from "@/src/components/PieChart";
+import ShareCardView from "@/src/components/ShareCardView";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { getPeriodiqueTotalBalance } from "@/src/db/repositories/financeRepo";
 import {
   dayWithMostExpense,
@@ -12,6 +14,9 @@ import {
   ExpenseVsIncomePerPeriod,
   getTransactionsByPeriodAndCategory,
 } from "@/src/db/repositories/statsRepo";
+import { requirePro } from "@/src/services/cloud/planCheck";
+import { getSymbol } from "@/src/services/currency/currencyStore";
+import { generateMonthlyPDF, loadMonthlyData, type MonthlyData } from "@/src/services/reports/reportService";
 import {
   ExpenseDay,
   getExpenseCalendar60Days,
@@ -19,15 +24,16 @@ import {
 import { getFinanceScore } from "@/src/services/stats/financeScore";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useAppTextColor } from "@/src/utils/colos";
-import { formatMoney } from "@/src/utils/format";
 import { diffDays, toYYYYMMDD } from "@/src/utils/goalDates";
 import { scale, verticalScale } from "@/src/utils/styling";
 import { FontAwesome5, Octicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import SegmentedControl from "@react-native-segmented-control/segmented-control";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Sharing from "expo-sharing";
 import React, { useCallback, useRef, useState } from "react";
 import {
+  Alert,
   Platform,
   RefreshControl,
   ScrollView,
@@ -38,6 +44,7 @@ import {
 } from "react-native";
 import { BarChart } from "react-native-gifted-charts";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { captureRef } from "react-native-view-shot";
 
 const generateYear = () => {
   const startYear = new Date().getFullYear() - 1;
@@ -50,6 +57,7 @@ const generateYear = () => {
 
 export default function TabThreeScreen() {
   const color = useAppTextColor();
+  const { displayAmount } = useCurrency();
   const [loading, setLoading] = React.useState(false);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [open, setOpen] = useState(false);
@@ -352,6 +360,31 @@ export default function TabThreeScreen() {
 
   const ScrollViewRef = useRef<ScrollView>(null);
 
+  // ── Partage image PNG ──
+  const shareCardRef = useRef<View>(null);
+  const [shareCardData, setShareCardData] = useState<MonthlyData | null>(null);
+  const [capturePending, setCapturePending] = useState(false);
+
+  React.useEffect(() => {
+    if (!capturePending || !shareCardData) return;
+    const run = async () => {
+      try {
+        // Laisser React rendre la carte avant de capturer
+        await new Promise(r => setTimeout(r, 250));
+        const uri = await captureRef(shareCardRef, { format: "png", quality: 1 });
+        const canShare = await Sharing.isAvailableAsync();
+        if (!canShare) { Alert.alert("Erreur", "Le partage n'est pas disponible."); return; }
+        await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Mon mois en image 📊" });
+      } catch (e: any) {
+        Alert.alert("Erreur", e?.message ?? "Impossible de générer l'image.");
+      } finally {
+        setCapturePending(false);
+        setShareCardData(null);
+      }
+    };
+    run();
+  }, [capturePending, shareCardData]);
+
   function handleAccordionOpen(itemLayoutY: number, itemContentHeight: number) {
     ScrollViewRef.current?.scrollTo({
       y: itemLayoutY - 100,
@@ -456,12 +489,13 @@ export default function TabThreeScreen() {
                               : new Date()
                           }
                           onChange={onChange}
+                          textColor={color}
                           style={{
                             height: 120,
                             marginTop: 20,
                             width: "100%",
                           }}
-                          textColor="#000"
+                          // textColor="#000"
                         />
                       )}
 
@@ -568,7 +602,7 @@ export default function TabThreeScreen() {
                               marginTop: 20,
                               width: "100%",
                             }}
-                            textColor="#000"
+                            textColor={color}
                           />
                         )}
 
@@ -664,7 +698,7 @@ export default function TabThreeScreen() {
                               marginTop: 20,
                               width: "100%",
                             }}
-                            textColor="#000"
+                            textColor={color}
                           />
                         )}
 
@@ -848,7 +882,7 @@ export default function TabThreeScreen() {
                 <ThemedText
                   style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22 }}
                 >
-                  {formatMoney(solde?.balance as any)} CFA
+                  {displayAmount(solde?.balance as any)}
                 </ThemedText>
               </View>
 
@@ -877,9 +911,7 @@ export default function TabThreeScreen() {
                       fontSize: 14,
                       color: COLORS.gray,
                     }}
-                  >
-                    Dépenses (CFA)
-                  </Text>
+                  >{`Dépenses (${getSymbol()})`}</Text>
                   <ThemedText
                     style={{
                       fontFamily: FONT_FAMILY.semibold,
@@ -887,7 +919,7 @@ export default function TabThreeScreen() {
                       color: COLORS.red,
                     }}
                   >
-                    {formatMoney(solde?.expense as any)}
+                    {displayAmount(solde?.expense as any)}
                   </ThemedText>
                 </View>
 
@@ -908,9 +940,7 @@ export default function TabThreeScreen() {
                       fontSize: 14,
                       color: COLORS.gray,
                     }}
-                  >
-                    Entrées (CFA)
-                  </Text>
+                  >{`Entrées (${getSymbol()})`}</Text>
                   <ThemedText
                     style={{
                       fontFamily: FONT_FAMILY.semibold,
@@ -918,7 +948,7 @@ export default function TabThreeScreen() {
                       color: COLORS.green,
                     }}
                   >
-                    {formatMoney(solde?.income as any)}
+                    {displayAmount(solde?.income as any)}
                   </ThemedText>
                 </View>
               </View>
@@ -1115,11 +1145,10 @@ export default function TabThreeScreen() {
                               fontSize: 14,
                             }}
                           >
-                            {formatMoney(
+                            {displayAmount(
                               analyse.find((a: any) => a.type === "depense")
                                 ?.total,
-                            )}{" "}
-                            CFA
+                            )}
                           </ThemedText>
                         </>
                       ) : (
@@ -1180,11 +1209,10 @@ export default function TabThreeScreen() {
                               fontSize: 14,
                             }}
                           >
-                            {formatMoney(
+                            {displayAmount(
                               analyse.find((a: any) => a.type === "entree")
                                 ?.total,
-                            )}{" "}
-                            CFA
+                            )}
                           </ThemedText>
                         </>
                       ) : (
@@ -1479,6 +1507,88 @@ export default function TabThreeScreen() {
                     </ThemedText>
                   </View>
                 </ThemedView>
+
+                {/* Bouton Score détaillé */}
+                {finance && (
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: "row", alignItems: "center",
+                      justifyContent: "center", gap: 6,
+                      marginTop: 8, paddingVertical: 10,
+                    }}
+                    onPress={() => {
+                      Alert.alert(
+                        `📊 Score financier : ${finance.total}/100`,
+                        [
+                          `🔵 Régularité : ${finance.regularity}%`,
+                          `   Jours avec transactions sur la période`,
+                          ``,
+                          `🟡 Discipline : ${finance.discipline}%`,
+                          `   Jours sans dépense & maîtrise week-end`,
+                          ``,
+                          `🟢 Contrôle budget : ${finance.budgetControl}%`,
+                          `   Budgets respectés ce mois`,
+                          ``,
+                          `🔴 Pouvoir d'épargne : ${finance.savingPower}%`,
+                          `   Ratio revenus / dépenses`,
+                          ``,
+                          finance.summary.message,
+                        ].join("\n"),
+                        [{ text: "Compris ✅" }]
+                      );
+                    }}
+                  >
+                    <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 13, color: COLORS.primary }}>
+                      Voir le score détaillé →
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* ── Rapport & Partage ── */}
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1, flexDirection: "row", alignItems: "center",
+                    justifyContent: "center", gap: 8,
+                    backgroundColor: COLORS.primary + "15",
+                    borderRadius: 14, paddingVertical: 14,
+                    borderWidth: 1, borderColor: COLORS.primary + "40",
+                  }}
+                  onPress={async () => {
+                    try {
+                      const now = new Date();
+                      const data = await loadMonthlyData(now.getMonth() + 1, now.getFullYear());
+                      setShareCardData(data);
+                      setCapturePending(true);
+                    } catch (e: any) { Alert.alert("Erreur", e?.message); }
+                  }}
+                >
+                  <Text style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 13, color: COLORS.primary }}>
+                    🎴 Partager mon mois
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1, flexDirection: "row", alignItems: "center",
+                    justifyContent: "center", gap: 8,
+                    backgroundColor: "#fef08a20",
+                    borderRadius: 14, paddingVertical: 14,
+                    borderWidth: 1, borderColor: "#f59e0b40",
+                  }}
+                  onPress={async () => {
+                    if (!(await requirePro("Le rapport PDF mensuel"))) return;
+                    const now = new Date();
+                    try {
+                      await generateMonthlyPDF(now.getMonth() + 1, now.getFullYear());
+                    } catch (e: any) { Alert.alert("Erreur", e?.message); }
+                  }}
+                >
+                  <Text style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 13, color: "#b45309" }}>
+                    📄 Rapport PDF ⭐
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Calendrier de dépense */}
@@ -1491,6 +1601,12 @@ export default function TabThreeScreen() {
           )}
         </ScrollView>
       </ThemedView>
+      {/* Vue hors-écran pour la capture PNG */}
+      {shareCardData && (
+        <View style={{ position: "absolute", top: -2000, left: 0, width: 375, height: 667 }}>
+          <ShareCardView ref={shareCardRef} data={shareCardData} />
+        </View>
+      )}
     </SafeAreaView>
   );
 }

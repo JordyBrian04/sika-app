@@ -158,3 +158,42 @@ export async function rescheduleAllActiveRecurring() {
     });
   }
 }
+
+/**
+ * Vérifie si des paiements récurrents sont en retard (pending depuis > 1 jour)
+ * et envoie une notification "paiement oublié" pour chacun.
+ * À appeler depuis le handler EOD chaque soir.
+ */
+export async function checkOverdueRecurringPayments(todayYYYYMMDD: string): Promise<void> {
+  const overdueItems = await all<{
+    recurring_id: number;
+    due_date: string;
+    name: string;
+    amount: number;
+  }>(
+    `SELECT q.recurring_id, q.due_date, r.name, r.amount
+     FROM recurring_due_queue q
+     JOIN recurring_payments r ON r.id = q.recurring_id
+     WHERE q.status = 'pending'
+       AND q.due_date < date(?, '-1 day')
+       AND r.active = 1`,
+    [todayYYYYMMDD]
+  );
+
+  for (const item of overdueItems) {
+    const daysDue = Math.floor(
+      (new Date(todayYYYYMMDD).getTime() - new Date(item.due_date).getTime()) / 86400000
+    );
+    const label = daysDue === 1 ? "hier" : `il y a ${daysDue} jours`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `💸 Paiement oublié : ${item.name}`,
+        body: `${item.amount.toLocaleString("fr-FR")} FCFA était prévu ${label}. As-tu payé ?`,
+        sound: "default",
+        data: { kind: "RECURRING_OVERDUE", recurringId: item.recurring_id },
+      },
+      trigger: null,
+    });
+  }
+}

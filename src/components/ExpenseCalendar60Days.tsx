@@ -3,6 +3,7 @@ import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
 import type { ExpenseDay } from "@/src/services/stats/expenseCalendar";
 import React, { useMemo, useState } from "react";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { Pressable, StyleSheet, View } from "react-native";
 import { FONT_FAMILY } from "../theme/fonts";
 
@@ -59,6 +60,7 @@ export default function ExpenseCalendar60Days({
   data,
   title = "Calendrier dépenses (60 jours)",
 }: Props) {
+  const { displayAmount } = useCurrency();
   const [selected, setSelected] = useState<ExpenseDay | null>(null);
 
   const max = useMemo(() => {
@@ -76,7 +78,7 @@ export default function ExpenseCalendar60Days({
           {title}
         </ThemedText>
         <ThemedText style={{ fontFamily: FONT_FAMILY.medium, fontSize: 12 }}>
-          Max: {formatMoney(max)} FCFA
+          Max: {displayAmount(max)}
         </ThemedText>
       </View>
 
@@ -120,7 +122,7 @@ export default function ExpenseCalendar60Days({
             {formatShortFR(selected.date)}
           </ThemedText>
           <ThemedText style={styles.infoAmount}>
-            {formatMoney(selected.amount)} FCFA
+            {displayAmount(selected.amount)}
           </ThemedText>
         </View>
       ) : (

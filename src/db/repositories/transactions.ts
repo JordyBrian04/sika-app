@@ -1,4 +1,8 @@
 import { COLORS } from "@/components/ui/color";
+import {
+  checkBudgetThresholdAlerts,
+  checkUnusualExpenseAlert,
+} from "@/src/notifications/budgetAlerts";
 import { checkTransactionBadges } from "@/src/services/badges/badgeService";
 import {
   formatDateYYYYMMDD,
@@ -84,6 +88,26 @@ export async function addTransaction(input: {
     console.warn("reward failed:", e);
   }
 
+  // ── Alertes budgétaires intelligentes (Pro) ───────────────────────────────
+  if (input.type === "depense" && input.category_id) {
+    const txDate = new Date(input.date);
+    const month = txDate.getMonth() + 1;
+    const year = txDate.getFullYear();
+
+    // Récupérer le nom de la catégorie pour les notifications
+    const cat = await getOne<{ name: string }>(
+      `SELECT name FROM categories WHERE id = ?`,
+      [input.category_id]
+    );
+    const catName = cat?.name ?? "cette catégorie";
+
+    // Alertes budgétaires — fire & forget (jamais bloquantes)
+    // checkBudgetThresholdAlerts gère les deux seuils (80% et 100%)
+    // en une seule requête avec détection de franchissement
+    checkBudgetThresholdAlerts(input.category_id, catName, input.amount, month, year).catch(() => {});
+    checkUnusualExpenseAlert(input.category_id, catName, input.amount).catch(() => {});
+  }
+
   return transactionId?.id;
 }
 
@@ -125,7 +149,14 @@ export async function listTransactions(limit = 50): Promise<TransactionRow[]> {
 }
 
 export async function deleteTransaction(id: number) {
-  await runSql(`DELETE FROM transactions WHERE id = ?`, [id]);
+    if (!id) {
+    throw new Error("ID invalide");
+  }
+
+  await runSql(
+    `DELETE FROM transactions WHERE id = ?`,
+    [id]
+  );
 }
 
 export async function sumByPeriod(params: {

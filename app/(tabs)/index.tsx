@@ -2,9 +2,11 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useIsPro } from "@/hooks/useIsPro";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import GaugeHalfCircle from "@/src/components/GaugeCard";
 import SwipeableTransaction from "@/src/components/SwipeableTransaction";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { CategoryInput, listeCategories } from "@/src/db/repositories/category";
 import {
   getMonthlyExpense,
@@ -26,6 +28,14 @@ import {
   insertTransactionFromRecurring,
 } from "@/src/notifications/recurringHandlers";
 import { getConstante, saveContante } from "@/src/services/AsyncStorage";
+import {
+  convertFromFCFA,
+  convertToFCFA,
+  Currency,
+  CURRENCY_SYMBOLS,
+  fetchRates
+} from "@/src/services/currency/currencyService";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
@@ -33,7 +43,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PlatformPressable } from "@react-navigation/elements";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -116,6 +126,16 @@ export default function HomeScreen() {
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
   const { openModal, closeModal, isVisible } = useModalQueue();
   const [loading, setLoading] = useState(false);
+  const { isPro } = useIsPro();
+  const { displayAmount, currency: globalCurrency } = useCurrency();
+  // Devise de saisie = devise globale par défaut
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(globalCurrency);
+  const CURRENCIES: Currency[] = ["XOF", "XAF", "USD", "EUR"];
+
+  // Sync quand la devise globale change dans Settings
+  useEffect(() => {
+    setSelectedCurrency(globalCurrency);
+  }, [globalCurrency]);
   const [option, setOption] = useState<TransactionType>("entree");
   const [transactionData, setTransactionData] = useState({
     amount: "0",
@@ -270,25 +290,16 @@ export default function HomeScreen() {
     );
 
     const soldeShow = await getConstante("showSolde");
-    console.log(soldeShow);
     setShowSolde(soldeShow === "enabled");
   };
 
   const getDatas = async () => {
     const transactions = await listTransactions(10);
-    console.log("Transactions:", groupTransactionsByDate(transactions));
-    // console.log("Unique dates:", ...new Set(transactions.map((t) => t.date)));
     const balance = await getTotalBalance();
     animatedToValue(balance.balance);
     const budgetInfo = await getMonthlyExpense();
-    console.log("Balance:", balance);
-    console.log("Budget Info:", budgetInfo);
     setTransactions(groupTransactionsByDate(transactions));
     setFrequencyTransaction(await listUpcomingRecurring(10));
-    console.log(
-      "Transactions récurrentes à venir:",
-      await listUpcomingRecurring(10),
-    );
     setBalance(balance);
     setBudgetInfo(budgetInfo);
   };
@@ -315,7 +326,6 @@ export default function HomeScreen() {
   };
 
   const handleSave = async () => {
-    console.log("Transaction data to save:", transactionData);
     if (
       transactionData.type !== "event" &&
       (transactionData.amount === "0" || transactionData.category_id === 0)
@@ -342,14 +352,26 @@ export default function HomeScreen() {
     try {
       let res: any;
 
+      // Toujours convertir vers FCFA (stockage interne)
+      // Ex : 8,33$ → 4 998 FCFA / 5 000 FCFA → 5 000 FCFA
+      let amountInFCFA = parseFloat(transactionData.amount);
+      if (selectedCurrency !== "XOF" && selectedCurrency !== "XAF") {
+        try {
+          const rates = await fetchRates();
+          amountInFCFA = convertToFCFA(amountInFCFA, selectedCurrency, rates);
+        } catch {
+          // Fallback taux fixes
+          const FALLBACK: Record<string, number> = { USD: 600, EUR: 655.96 };
+          const r = FALLBACK[selectedCurrency] ?? 1;
+          amountInFCFA = amountInFCFA * r;
+        }
+      }
+
       // Ajout transaction dans la base de données
       if (transactionData.type === "event") {
-        // Enregistrer dans la table des paiements récurrents
-        // console.log("Données de la charge mensuelle à enregistrer:", transactionData);
-        // await addRecurringPayment(transactionData);
         res = await addRecurringPayment({
           name: transactionData.name,
-          amount: parseInt(transactionData.amount),
+          amount: amountInFCFA,
           category_id: transactionData.category_id,
           frequency: transactionData.frequency,
           interval_count: parseInt(transactionData.interval_count),
@@ -358,12 +380,11 @@ export default function HomeScreen() {
           active: transactionData.active,
         });
 
-        console.log("ID du paiement récurrent ajouté:", res);
       } else {
         // Enregistrer dans la table des transactions
         if (transactionData.id > 0) {
           res = await editTransaction({
-            amount: parseInt(transactionData.amount),
+            amount: amountInFCFA,
             type: transactionData.type,
             category_id: transactionData.category_id,
             date: transactionData.date,
@@ -373,7 +394,7 @@ export default function HomeScreen() {
           });
         } else {
           res = await addTransaction({
-            amount: parseInt(transactionData.amount),
+            amount: amountInFCFA,
             type: transactionData.type,
             category_id: transactionData.category_id,
             date: transactionData.date,
@@ -382,7 +403,6 @@ export default function HomeScreen() {
           });
         }
 
-        console.log("ID de la transaction ajoutée:", res);
       }
 
       if (parseInt(res) > 0) {
@@ -607,7 +627,7 @@ export default function HomeScreen() {
                 alignItems: "center",
               }}
             >
-              <ThemedText
+              <Text
                 style={{
                   fontFamily: FONT_FAMILY.bold,
                   fontSize: 35,
@@ -615,12 +635,12 @@ export default function HomeScreen() {
                 }}
               >
                 S
-                <ThemedText
-                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22 }}
+                <Text
+                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 22, color: color }}
                 >
                   ika
-                </ThemedText>
-              </ThemedText>
+                </Text>
+              </Text>
 
               <View
                 style={{
@@ -682,7 +702,7 @@ export default function HomeScreen() {
                       animatedStyle,
                     ]}
                   >
-                    {`${solde.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`}
+                    {displayAmount(Math.trunc(solde))}
                   </Animated.Text>
                 ) : (
                   <Text
@@ -755,12 +775,12 @@ export default function HomeScreen() {
                     Depensé :{" "}
                     <Text style={{ fontFamily: FONT_FAMILY.semibold }}>
                       {budgetInfo
-                        ? `${budgetInfo.totalExpense.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
+                        ? displayAmount(Math.trunc(budgetInfo.totalExpense))
                         : "Loading..."}{" "}
                     </Text>
                     /{" "}
                     {budgetInfo
-                      ? `${budgetInfo.totalBudget.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} FCFA`
+                      ? displayAmount(Math.trunc(budgetInfo.totalBudget))
                       : "Loading..."}
                   </ThemedText>
 
@@ -970,7 +990,7 @@ export default function HomeScreen() {
                           })}
                         </ThemedText>
                         <ThemedText style={{ fontFamily: "Bold" }}>
-                          {formatMoney(t.amount)} FCFA
+                          {displayAmount(t.amount)}
                         </ThemedText>
                         <TouchableOpacity
                           style={{
@@ -1084,7 +1104,7 @@ export default function HomeScreen() {
                           }}
                         >
                           {item.dayBalance > 0 ? "+" : ""}
-                          {formatMoney(String(item.dayBalance))} FCFA
+                          {displayAmount(Number(item.dayBalance))}
                         </Text>
                       </View>
 
@@ -1092,7 +1112,7 @@ export default function HomeScreen() {
                         <SwipeableTransaction
                           key={trans.id}
                           trans={trans}
-                          onPress={(id: any) => handleDelete(id)}
+                          onPress={() => handleDelete(trans.id)}
                           onPressEdit={(id: any) => handleEdit(id)}
                         />
                         // <GestureDetector key={trans.id} gesture={panGesture}>
@@ -1263,7 +1283,7 @@ export default function HomeScreen() {
                         //           //   color === "#FFFFFF" ? COLORS.dark : COLORS.white,
                         //         }}
                         //       >
-                        //         {formatMoney(trans.amount)} CFA
+                        //         {displayAmount(trans.amount)}
                         //       </ThemedText>
                         //     </TouchableOpacity>
                         //   </Animated.View>
@@ -1373,8 +1393,9 @@ export default function HomeScreen() {
                 justifyContent: "center",
               }}
             >
+              {/* Label = devise sélectionnée pour la saisie */}
               <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-                Montant (CFA)
+                {`Montant (${CURRENCY_SYMBOLS[selectedCurrency] ?? getSymbol()})`}
               </ThemedText>
               <TextInput
                 placeholder="0"
@@ -1395,6 +1416,52 @@ export default function HomeScreen() {
                 }
                 value={transactionData.amount}
               />
+
+              {/* Sélecteur de devise (Pro) — reconversion automatique au changement */}
+              {isPro && <View style={{ flexDirection: "row", gap: 6, justifyContent: "center", marginTop: 6 }}>
+                {CURRENCIES.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    onPress={async () => {
+                      if (c === selectedCurrency) return;
+                      // Reconvertir le montant actuel dans la nouvelle devise
+                      const current = parseFloat(transactionData.amount) || 0;
+                      if (current > 0) {
+                        try {
+                          const rates = await fetchRates();
+                          // current est en selectedCurrency → FCFA → c
+                          const inFCFA = convertToFCFA(current, selectedCurrency, rates);
+                          const inNew  = convertFromFCFA(inFCFA, c, rates);
+                          const decimals = c === "USD" || c === "EUR" ? 2 : 0;
+                          setTransactionData(prev => ({
+                            ...prev,
+                            amount: decimals > 0
+                              ? inNew.toFixed(decimals)
+                              : String(Math.round(inNew)),
+                          }));
+                        } catch {
+                          // Taux indisponibles — garde le montant tel quel
+                        }
+                      }
+                      setSelectedCurrency(c);
+                    }}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 5,
+                      borderRadius: 20,
+                      backgroundColor: selectedCurrency === c ? COLORS.primary : "transparent",
+                      borderWidth: 1,
+                      borderColor: selectedCurrency === c ? COLORS.primary : COLORS.gray + "60",
+                    }}
+                  >
+                    <Text style={{
+                      fontFamily: FONT_FAMILY.semibold, fontSize: 12,
+                      color: selectedCurrency === c ? "#fff" : COLORS.gray,
+                    }}>
+                      {CURRENCY_SYMBOLS[c]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>}
             </View>
 
             {transactionData.type !== "event" && (
@@ -1467,7 +1534,7 @@ export default function HomeScreen() {
                           marginTop: 20,
                           width: "100%",
                         }}
-                        textColor="#000"
+                        textColor={color}
                       />
                     )}
 
@@ -1511,7 +1578,7 @@ export default function HomeScreen() {
                       <TouchableOpacity onPress={toggleDatePicker}>
                         <TextInput
                           placeholder="Date debut"
-                          placeholderTextColor="#000"
+                          placeholderTextColor={color === "#FFFFFF" ? COLORS.dark : COLORS.white}
                           style={{
                             borderWidth: 1,
                             borderColor: "gray",
@@ -1543,7 +1610,7 @@ export default function HomeScreen() {
                   <TextInput
                     multiline
                     placeholder="Ajouter une note"
-                    placeholderTextColor={color}
+                    placeholderTextColor={color === "#FFFFFF" ? COLORS.dark : COLORS.white}
                     style={{
                       borderWidth: 1,
                       borderColor: "gray",
@@ -1720,7 +1787,7 @@ export default function HomeScreen() {
                           marginTop: 20,
                           width: "100%",
                         }}
-                        textColor="#000"
+                        textColor={color}
                       />
                     )}
 
@@ -1764,7 +1831,7 @@ export default function HomeScreen() {
                       <TouchableOpacity onPress={toggleDatePicker}>
                         <TextInput
                           placeholder="Date debut"
-                          placeholderTextColor="#000"
+                          placeholderTextColor={color}
                           style={{
                             borderWidth: 1,
                             borderColor: "gray",

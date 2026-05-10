@@ -3,8 +3,15 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { listeCategories } from "@/src/db/repositories/category";
 import { addTransaction } from "@/src/db/repositories/transactions";
+import { isUserPro, requirePro } from "@/src/services/cloud/planCheck";
+import { getSymbol } from "@/src/services/currency/currencyStore";
+import {
+  convertToFCFA,
+  fetchRates,
+} from "@/src/services/currency/currencyService";
 import { addContribution } from "@/src/services/goals/contributions";
 import {
   createGoal,
@@ -16,7 +23,6 @@ import { autoCheckNoSpendDay } from "@/src/services/missions/noSpendDay";
 import { ensureWeeklyPackAI } from "@/src/services/missions/weeklyAI";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useAppTextColor } from "@/src/utils/colos";
-import { formatMoney } from "@/src/utils/format";
 import { diffDays, toYYYYMMDD } from "@/src/utils/goalDates";
 import {
   Feather,
@@ -45,6 +51,7 @@ import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const MAX_TRANSLATE_Y = -SCREEN_HEIGHT + 50;
 const { width, height } = Dimensions.get("window");
 const CIRCLE_SIZE = 1000;
 const R = 45;
@@ -57,6 +64,7 @@ const formatNumberWithCommas = (num: number) => {
 
 export default function TabFourScreen() {
   const color = useAppTextColor();
+  const { displayAmount, currency: globalCurrency } = useCurrency();
   const [weeklyMissions, setWeeklyMissions] = React.useState<any>(null);
   const [weeklyBoosts, setWeeklyBoosts] = React.useState<any[]>([]);
   const [goals, setGoals] = React.useState<any[]>([]);
@@ -70,6 +78,8 @@ export default function TabFourScreen() {
   const [open2, setOpen2] = useState(false);
   const [open3, setOpen3] = useState(false);
   const [date, setDate] = useState(new Date());
+  const [date2, setDate2] = useState(new Date());
+  const [date3, setDate3] = useState(new Date());
   const OPTIONS = [
     { key: "low", label: "Basse" },
     { key: "medium", label: "Moyenne" },
@@ -112,100 +122,99 @@ export default function TabFourScreen() {
     setOpen3(!open3);
   };
 
+  // Formate un montant déjà en devise courante (sans re-conversion FCFA)
+  const formatInCurrency = (amount: number): string => {
+    const isDecimal = globalCurrency === "USD" || globalCurrency === "EUR";
+    return `${amount.toLocaleString("fr-FR", {
+      minimumFractionDigits: isDecimal ? 2 : 0,
+      maximumFractionDigits: isDecimal ? 2 : 0,
+    })} ${getSymbol()}`;
+  };
+
+  // Convertit un montant de la devise courante vers FCFA pour la sauvegarde
+  const toFCFA = async (amount: number): Promise<number> => {
+    if (globalCurrency === "XOF" || globalCurrency === "XAF") return amount;
+    try {
+      const rates = await fetchRates();
+      return convertToFCFA(amount, globalCurrency, rates);
+    } catch {
+      const FALLBACK: Record<string, number> = { USD: 600, EUR: 655.96 };
+      return amount * (FALLBACK[globalCurrency] ?? 1);
+    }
+  };
+
+  // Convertit "YYYY-MM-DD" en Date locale (évite décalage timezone UTC)
+  const parseLocalDate = (iso: string): Date => {
+    if (!iso) return new Date();
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  // Formate une Date en "YYYY-MM-DD" en heure locale (pas UTC)
+  const toLocalISODate = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
   const onChange = ({ type }: any, selectedDate: any) => {
+    if (!selectedDate) return;
+    const currentDate = selectedDate;
+    setDate(currentDate);
     if (type === "set") {
-      const currentDate = selectedDate;
-      setDate(currentDate);
-
       if (Platform.OS === "android") {
-        toggleDatePicker();
-
-        //On attribu la date à la valeur date (currentDate.toLocaleDateString('fr-FR'))
-        setEpargneData({
-          ...epargneData,
-          target_date: currentDate.toISOString().substring(0, 10),
-        });
-        // setTache({
-        //   ...tache,
-        //   date: currentDate.toLocaleDateString('fr-FR', options)
-        // })
+        setOpen(false);
+        setEpargneData(prev => ({ ...prev, target_date: toLocalISODate(currentDate) }));
       }
+      // iOS : l'utilisateur confirme via le bouton Valider
     } else {
-      toggleDatePicker();
+      // Annulé (Android)
+      setOpen(false);
     }
   };
 
   const onChange2 = ({ type }: any, selectedDate: any) => {
+    if (!selectedDate) return;
+    const currentDate = selectedDate;
+    setDate2(currentDate);
     if (type === "set") {
-      const currentDate = selectedDate;
-      setDate(currentDate);
-
       if (Platform.OS === "android") {
-        toggleDatePicker2();
-
-        //On attribu la date à la valeur date (currentDate.toLocaleDateString('fr-FR'))
-        setEpargneData({
-          ...epargneData,
-          start_date: currentDate.toISOString().substring(0, 10),
-        });
-        // setTache({
-        //   ...tache,
-        //   date: currentDate.toLocaleDateString('fr-FR', options)
-        // })
+        setOpen2(false);
+        setEpargneData(prev => ({ ...prev, start_date: toLocalISODate(currentDate) }));
       }
     } else {
-      toggleDatePicker2();
+      setOpen2(false);
     }
   };
 
   const onChange3 = ({ type }: any, selectedDate: any) => {
+    if (!selectedDate) return;
+    const currentDate = selectedDate;
+    setDate3(currentDate);
     if (type === "set") {
-      const currentDate = selectedDate;
-      setDate(currentDate);
-
       if (Platform.OS === "android") {
-        toggleDatePicker3();
-
-        //On attribu la date à la valeur date (currentDate.toLocaleDateString('fr-FR'))
-        setContribution({
-          ...contribution,
-          date: currentDate.toISOString().substring(0, 10),
-        });
-        // setTache({
-        //   ...tache,
-        //   date: currentDate.toLocaleDateString('fr-FR', options)
-        // })
+        setOpen3(false);
+        setContribution(prev => ({ ...prev, date: toLocalISODate(currentDate) }));
       }
     } else {
-      toggleDatePicker3();
+      setOpen3(false);
     }
   };
 
   const confirmIOSDate = () => {
-    // console.log(date.toISOString().substring(0, 10));
-    setEpargneData({
-      ...epargneData,
-      target_date: date.toISOString().substring(0, 10),
-    });
-    toggleDatePicker();
+    setEpargneData(prev => ({ ...prev, target_date: toLocalISODate(date) }));
+    setOpen(false);
   };
 
   const confirmIOSDate2 = () => {
-    // console.log(date.toISOString().substring(0, 10));
-    setEpargneData({
-      ...epargneData,
-      start_date: date.toISOString().substring(0, 10),
-    });
-    toggleDatePicker2();
+    setEpargneData(prev => ({ ...prev, start_date: toLocalISODate(date2) }));
+    setOpen2(false);
   };
 
   const confirmIOSDate3 = () => {
-    // console.log(date.toISOString().substring(0, 10));
-    setContribution({
-      ...contribution,
-      date: date.toISOString().substring(0, 10),
-    });
-    toggleDatePicker3();
+    setContribution(prev => ({ ...prev, date: toLocalISODate(date3) }));
+    setOpen3(false);
   };
 
   const calculatePercentage = (current: number, total: number) => {
@@ -307,8 +316,8 @@ export default function TabFourScreen() {
     console.log("totalMonth", Math.max(Math.ceil(totalWeeks / 4), 1));
 
     const remainingAmount =
-      parseInt(epargneData.target_amount) -
-      parseInt(epargneData.current_amount);
+      parseFloat(epargneData.target_amount) -
+      parseFloat(epargneData.current_amount);
     const minWeekly = Math.ceil(remainingAmount / totalWeeks);
     const minDayly = Math.ceil(remainingAmount / totalDays);
     const minMonthly = Math.ceil(
@@ -341,10 +350,10 @@ export default function TabFourScreen() {
   const handleSave = async () => {
     if (
       !epargneData.name ||
-      parseInt(epargneData.target_amount) <= 0 ||
+      parseFloat(epargneData.target_amount) <= 0 ||
       !epargneData.target_date ||
       !epargneData.start_date ||
-      parseInt(epargneData.min_weekly) <= 0
+      parseFloat(epargneData.min_weekly) <= 0
     ) {
       // Handle the case where some fields are missing
       alert("Veuillez remplir tous les champs correctement.");
@@ -353,20 +362,36 @@ export default function TabFourScreen() {
 
     setLoading2(true);
     try {
+      // Limite gratuit : 2 objectifs actifs maximum
+      const pro = await isUserPro();
+      if (!pro) {
+        const activeGoals = await listGoals();
+        if (activeGoals.length >= 2) {
+          setLoading2(false);
+          await requirePro("Les objectifs illimités (tu as atteint la limite de 2 objectifs)");
+          return;
+        }
+      }
+
+      // Conversion vers FCFA (stockage interne)
+      const targetFCFA    = await toFCFA(parseFloat(epargneData.target_amount) || 0);
+      const currentFCFA   = await toFCFA(parseFloat(epargneData.current_amount) || 0);
+      const minWeeklyFCFA = await toFCFA(parseFloat(epargneData.min_weekly) || 0);
+
       const goalId = await createGoal({
-        name: epargneData.name, // You should replace this with the actual goal ID
-        target_amount: parseInt(epargneData.target_amount),
+        name: epargneData.name,
+        target_amount: targetFCFA,
         target_date: epargneData.target_date,
         start_date: epargneData.start_date,
         priority: epargneData.priority as any,
-        min_weekly: parseInt(epargneData.min_weekly),
+        min_weekly: minWeeklyFCFA,
         frequence: epargneData.frequence as any,
       });
 
-      if (parseInt(epargneData.current_amount) > 0) {
+      if (currentFCFA > 0) {
         await addContribution({
-          goal_id: goalId, // You should replace this with the actual goal ID
-          amount: parseInt(epargneData.current_amount),
+          goal_id: goalId,
+          amount: currentFCFA,
           date: new Date().toISOString().substring(0, 10),
           source: "auto",
         });
@@ -401,7 +426,7 @@ export default function TabFourScreen() {
   };
 
   const handleSaveContribution = async () => {
-    if (!contribution.amount || parseInt(contribution.amount) <= 0) {
+    if (!contribution.amount || parseFloat(contribution.amount) <= 0) {
       alert("Veuillez entrer un montant valide.");
       return;
     }
@@ -410,7 +435,7 @@ export default function TabFourScreen() {
     try {
       await addContribution({
         goal_id: selectedGoals.id, // You should replace this with the actual goal ID
-        amount: parseInt(contribution.amount),
+        amount: parseFloat(contribution.amount),
         date: contribution.date,
         source: "manual",
       });
@@ -418,7 +443,7 @@ export default function TabFourScreen() {
       const cat = await listeCategories();
 
       await addTransaction({
-        amount: parseInt(contribution.amount),
+        amount: parseFloat(contribution.amount),
         type: "depense",
         date: toYYYYMMDD(new Date()),
         note: `Contribution sur l'épargne : ${selectedGoals.name}`,
@@ -504,6 +529,7 @@ export default function TabFourScreen() {
                   onPress={() => {
                     setInputShown("add_goal");
                     toggleSheet();
+                    ref.current?.scrollTo(MAX_TRANSLATE_Y)
                   }}
                 >
                   <Feather name="plus-circle" size={40} color={color} />
@@ -769,8 +795,8 @@ export default function TabFourScreen() {
                               fontSize: 12,
                             }}
                           >
-                            Reste {formatMoney(item.details.remaining_amount)}{" "}
-                            CFA sur {formatMoney(item.target_amount)} CFA
+                            Reste {displayAmount(item.details.remaining_amount)}{" "}
+                            sur {displayAmount(item.target_amount)}
                           </Text>
                           <View
                             style={{
@@ -936,9 +962,7 @@ export default function TabFourScreen() {
                 </View>
 
                 <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    Montant cible (CFA)
-                  </ThemedText>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant cible (${getSymbol()})`}</ThemedText>
                   <TextInput
                     placeholder="Ex: 200 000"
                     placeholderTextColor={COLORS.gray}
@@ -960,9 +984,7 @@ export default function TabFourScreen() {
                 </View>
 
                 <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    Apport initial (CFA)
-                  </ThemedText>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Apport initial (${getSymbol()})`}</ThemedText>
                   <TextInput
                     placeholder="Ex: 0"
                     placeholderTextColor={COLORS.gray}
@@ -1002,7 +1024,7 @@ export default function TabFourScreen() {
                         display="spinner"
                         value={
                           epargneData.target_date
-                            ? new Date(epargneData.target_date)
+                            ? parseLocalDate(epargneData.target_date)
                             : new Date()
                         }
                         onChange={onChange}
@@ -1011,7 +1033,7 @@ export default function TabFourScreen() {
                           marginTop: 20,
                           width: "100%",
                         }}
-                        textColor="#000"
+                        textColor={color}
                       />
                     )}
 
@@ -1100,7 +1122,7 @@ export default function TabFourScreen() {
                         display="spinner"
                         value={
                           epargneData.start_date
-                            ? new Date(epargneData.start_date)
+                            ? parseLocalDate(epargneData.start_date)
                             : new Date()
                         }
                         onChange={onChange2}
@@ -1109,7 +1131,7 @@ export default function TabFourScreen() {
                           marginTop: 20,
                           width: "100%",
                         }}
-                        textColor="#000"
+                        textColor={color}
                       />
                     )}
 
@@ -1335,7 +1357,7 @@ export default function TabFourScreen() {
                         }}
                       >
                         Epargne journalière :{" "}
-                        {formatMoney(periodeDAtats.min_dayly as any)} CFA
+                        {formatInCurrency(periodeDAtats.min_dayly)}
                       </Text>
                     </TouchableOpacity>
 
@@ -1396,7 +1418,7 @@ export default function TabFourScreen() {
                         }}
                       >
                         Epargne hebdomadaire :{" "}
-                        {formatMoney(periodeDAtats.min_weekly as any)} CFA
+                        {formatInCurrency(periodeDAtats.min_weekly)}
                       </Text>
                     </TouchableOpacity>
 
@@ -1457,7 +1479,7 @@ export default function TabFourScreen() {
                         }}
                       >
                         Epargne mensuelle :{" "}
-                        {formatMoney(periodeDAtats.min_monthly as any)} CFA
+                        {formatInCurrency(periodeDAtats.min_monthly)}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1570,7 +1592,7 @@ export default function TabFourScreen() {
                         display="spinner"
                         value={
                           contribution.date
-                            ? new Date(contribution.date)
+                            ? parseLocalDate(contribution.date)
                             : new Date()
                         }
                         onChange={onChange3}
@@ -1656,9 +1678,7 @@ export default function TabFourScreen() {
                     justifyContent: "center",
                   }}
                 >
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-                    Montant (CFA)
-                  </ThemedText>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>{`Montant (${getSymbol()})`}</ThemedText>
                   <TextInput
                     placeholder="0"
                     keyboardType="numeric"

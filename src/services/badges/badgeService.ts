@@ -58,7 +58,9 @@ export async function checkTransactionBadges() {
 
 // ─── 2. Badges de budget ─────────────────────────────────────────
 export async function checkBudgetBadges() {
-  await unlockBadge("FIRST_BUDGET");
+  // Vérifie qu'au moins un budget existe avant de donner le badge
+  const row = await getOne<{ c: number }>(`SELECT COUNT(*) as c FROM budgets`);
+  if ((row?.c ?? 0) >= 1) await unlockBadge("FIRST_BUDGET");
 }
 
 // ─── 3. Badges d'épargne ─────────────────────────────────────────
@@ -75,7 +77,9 @@ export async function checkSavingBadges() {
 
 // ─── 4. Badge premier objectif ───────────────────────────────────
 export async function checkGoalBadges() {
-  await unlockBadge("FIRST_GOAL");
+  // Vérifie qu'au moins un objectif existe
+  const row = await getOne<{ c: number }>(`SELECT COUNT(*) as c FROM saving_goals`);
+  if ((row?.c ?? 0) >= 1) await unlockBadge("FIRST_GOAL");
 }
 
 // ─── 5. Badge objectif atteint ───────────────────────────────────
@@ -97,8 +101,15 @@ export async function checkGoalCompleted(goalId: number) {
 }
 
 // ─── 6. Badge journée sans dépense ──────────────────────────────
-export async function checkNoSpendDayBadge() {
-  await unlockBadge("NO_SPEND_DAY");
+export async function checkNoSpendDayBadge(today?: string) {
+  const date = today ?? new Date().toISOString().substring(0, 10);
+  // Vérifie qu'aujourd'hui il n'y a aucune dépense
+  const row = await getOne<{ c: number }>(
+    `SELECT COUNT(*) as c FROM transactions
+     WHERE type = 'depense' AND date = ? AND deleted_at IS NULL`,
+    [date]
+  );
+  if ((row?.c ?? 0) === 0) await unlockBadge("NO_SPEND_DAY");
 }
 
 // ─── 7. Badges de paiements récurrents ───────────────────────────

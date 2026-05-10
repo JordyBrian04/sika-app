@@ -1,7 +1,7 @@
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import * as React from "react";
-import { Dimensions, Keyboard, StyleSheet, View } from "react-native";
+import { Dimensions, Keyboard, Platform, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Portal } from "react-native-portalize";
 import Animated, {
@@ -34,33 +34,32 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
     const translateY = useSharedValue(SCREEN_HEIGHT);
     const context = useSharedValue({ y: 0 });
     const active = useSharedValue(false);
-    const activeJS = React.useRef(false);
     const handleScale = useSharedValue(1);
-    /** Track the destination the caller last requested (JS-side) */
-    const lastDestination = React.useRef(-500);
-
+    // Shared values so both UI thread (gesture) and JS thread (keyboard) stay in sync
+    const lastDestination = useSharedValue(-500);
     const keyboardHeight = useSharedValue(0);
 
     React.useEffect(() => {
-      const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+      // On iOS use Will-events to follow the keyboard animation in real time
+      const showEvent =
+        Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+      const hideEvent =
+        Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+      const showSub = Keyboard.addListener(showEvent, (e) => {
+        // Reading shared values from JS thread is safe in Reanimated 3
         if (!active.value) return;
         const kbH = e.endCoordinates.height;
-        // Skip if keyboard height hasn't changed (avoids re-animation on every keystroke)
         if (kbH === keyboardHeight.value) return;
         keyboardHeight.value = kbH;
-        const dest = Math.max(
-          lastDestination.current - kbH,
-          MAX_TRANSLATE_Y,
-        );
+        const dest = Math.max(lastDestination.value - kbH, MAX_TRANSLATE_Y);
         translateY.value = withTiming(dest, { duration: 250 });
       });
 
-      const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      const hideSub = Keyboard.addListener(hideEvent, () => {
         if (!active.value) return;
         keyboardHeight.value = 0;
-        translateY.value = withTiming(lastDestination.current, {
-          duration: 250,
-        });
+        translateY.value = withTiming(lastDestination.value, { duration: 250 });
       });
 
       return () => {
@@ -72,6 +71,7 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
     const scrollTo = (destination: number) => {
       "worklet";
       active.value = destination < SCREEN_HEIGHT;
+      lastDestination.value = destination;
       translateY.value = withSpring(destination, {
         damping: 50,
         stiffness: 200,
@@ -79,12 +79,12 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
     };
 
     const scrollToJS = React.useCallback((destination: number) => {
-      activeJS.current = destination < SCREEN_HEIGHT;
-      lastDestination.current = destination;
+      // Set from JS immediately so keyboard listeners see it before runOnUI fires
+      lastDestination.value = destination;
       runOnUI(scrollTo)(destination);
     }, []);
 
-    const isActive = React.useCallback(() => activeJS.current, []);
+    const isActive = React.useCallback(() => active.value, []);
 
     React.useImperativeHandle(ref, () => ({
       scrollTo: scrollToJS,
@@ -121,6 +121,7 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
         } else if (translateY.value < -SCREEN_HEIGHT / 1.5) {
           scrollTo(MAX_TRANSLATE_Y);
         }
+        // scrollTo updates active & lastDestination — no runOnJS needed
       });
 
     const animatedbackdropStyle = useAnimatedStyle(() => ({
@@ -173,7 +174,10 @@ const BottomSheet = React.forwardRef<BottomSheetRefProps, PropsBottomSheet>(
     return (
       <Portal>
         <Animated.View
-          onTouchStart={() => scrollToJS(SCREEN_HEIGHT)}
+          onTouchStart={() => {
+            Keyboard.dismiss();
+            scrollToJS(SCREEN_HEIGHT);
+          }}
           style={[styles.backdrop, animatedbackdropStyle]}
           animatedProps={animatedbackdropProps}
         />

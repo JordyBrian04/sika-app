@@ -281,6 +281,7 @@ function chooseMissionAndBoosts(profile: Profile): {
 export async function ensureWeeklyPackAI() {
   const week_key = getWeekKey(new Date());
 
+  // ── 1. Mission de la semaine courante ───────────────────────────────────
   let mission = await getOne<any>(
     `SELECT * FROM weekly_missions WHERE week_key=? ORDER BY id DESC LIMIT 1`,
     [week_key],
@@ -291,43 +292,61 @@ export async function ensureWeeklyPackAI() {
       `SELECT * FROM weekly_boosts WHERE mission_id=? ORDER BY id ASC`,
       [mission.id],
     );
-    return { mission, boosts };
+    // Retourne le pack si les boosts existent déjà (cas normal)
+    if (boosts.length > 0) return { mission, boosts };
+    // Sinon les boosts ont été perdus → on les recrée ci-dessous
   }
 
-  // expire anciennes missions actives
+  // ── 2. Nouvelle semaine (ou boosts manquants) ───────────────────────────
+  // Expire TOUTES les missions des semaines précédentes (actives ET done)
   await runSql(
-    `UPDATE weekly_missions SET status='expired' WHERE status='active' AND week_key <> ?`,
+    `UPDATE weekly_missions SET status='expired' WHERE week_key <> ?`,
+    [week_key],
+  );
+  // Expire aussi leurs boosts pour un nettoyage complet
+  await runSql(
+    `UPDATE weekly_boosts SET status='expired'
+     WHERE mission_id IN (
+       SELECT id FROM weekly_missions WHERE week_key <> ?
+     )`,
     [week_key],
   );
 
-  const profile = await buildProfile(28);
+  // ── 3. Générer mission IA (si elle n'existe pas encore pour cette semaine)
+  const profile = await buildProfile(7);
   const pick = chooseMissionAndBoosts(profile);
 
-  await runSql(
-    `INSERT INTO weekly_missions (week_key,title,description,goal_amount,reward_xp,reward_coins,status,ai_reason,ai_profile)
-     VALUES (?,?,?,?,?,?, 'active', ?, ?)`,
-    [
-      week_key,
-      pick.mission.title,
-      pick.mission.description,
-      pick.mission.goal_amount,
-      pick.mission.reward_xp,
-      pick.mission.reward_coins,
-      pick.mission.ai_reason,
-      JSON.stringify(pick.ai_profile),
-    ],
-  );
+  if (!mission) {
+    await runSql(
+      `INSERT INTO weekly_missions
+         (week_key, title, description, goal_amount, reward_xp, reward_coins, status, ai_reason, ai_profile)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      [
+        week_key,
+        pick.mission.title,
+        pick.mission.description,
+        pick.mission.goal_amount,
+        pick.mission.reward_xp,
+        pick.mission.reward_coins,
+        pick.mission.ai_reason,
+        JSON.stringify(pick.ai_profile),
+      ],
+    );
 
-  mission = await getOne<any>(
-    `SELECT * FROM weekly_missions WHERE week_key=? ORDER BY id DESC LIMIT 1`,
-    [week_key],
-  );
+    mission = await getOne<any>(
+      `SELECT * FROM weekly_missions WHERE week_key=? ORDER BY id DESC LIMIT 1`,
+      [week_key],
+    );
 
+    if (!mission) throw new Error(`[weekly] Failed to create mission for ${week_key}`);
+  }
+
+  // ── 4. Générer les boosts (toujours, qu'ils soient manquants ou nouveaux)
   for (const b of pick.boosts) {
     await runSql(
       `INSERT OR IGNORE INTO weekly_boosts
-       (mission_id,code,title,description,goal_amount,reward_xp,reward_coins,status)
-       VALUES (?,?,?,?,?,?,?, 'active')`,
+         (mission_id, code, title, description, goal_amount, reward_xp, reward_coins, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
       [
         mission.id,
         b.code,

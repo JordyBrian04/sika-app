@@ -9,6 +9,7 @@ import { Host } from "react-native-portalize";
 import "react-native-reanimated";
 
 import { UserInactivityProvider } from "@/context/UserInactivity";
+import { CurrencyProvider } from "@/src/context/CurrencyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { enableAutoBackup, isAutoBackupEnabled } from "@/src/db/autoBackupTask";
 import { ensureAndroidChannels } from "@/src/notifications/channels";
@@ -53,7 +54,15 @@ export default function RootLayout() {
       });
   }, []);
 
+  // ⚠️ Ce useEffect dépend de `ready` : il ne s'exécute qu'après que migrate()
+  // ait terminé. Sans ça, les services qui lisent user_profile (updateActivityAndStreak,
+  // checkBudgetControlBadges, etc.) crashent avec "no such table: user_profile".
   useEffect(() => {
+    if (!ready) return;
+
+    let sub: { remove: () => void } | null = null;
+    let eodsub: { remove: () => void } | null = null;
+
     (async () => {
       await ensureNotificationPermissions();
       await setupRecurringNotificationCategory();
@@ -85,22 +94,24 @@ export default function RootLayout() {
           console.log("⚠️ Auto-backup non activé:", error);
         }
       }
+
+      // Les listeners sont enregistrés ici, après que la DB soit prête
+      sub = registerRecurringNotificationResponseListener(() =>
+        toYYYYMMDD(new Date()),
+      );
+      eodsub = registerEODNotificationListener(minWeekly.current);
     })();
 
-    const sub = registerRecurringNotificationResponseListener(() =>
-      toYYYYMMDD(new Date()),
-    );
-
-    const eodsub = registerEODNotificationListener(minWeekly.current);
     return () => {
-      sub.remove();
-      eodsub.remove();
+      sub?.remove();
+      eodsub?.remove();
     };
-  }, []);
+  }, [ready]);
 
   if (!ready || !fontsLoaded) return null;
 
   return (
+    <CurrencyProvider>
     <UserInactivityProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Host>
@@ -164,6 +175,26 @@ export default function RootLayout() {
                 name="(screens)/ClotureMois"
                 options={{ headerShown: false, gestureEnabled: true }}
               />
+              <Stack.Screen
+                name="(screens)/Profile"
+                options={{ headerShown: false, gestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="(screens)/CloudSignup"
+                options={{
+                  headerShown: false,
+                  gestureEnabled: true,
+                  presentation: "modal",
+                }}
+              />
+              <Stack.Screen
+                name="(screens)/Paywall"
+                options={{
+                  headerShown: false,
+                  gestureEnabled: true,
+                  presentation: "modal",
+                }}
+              />
             </Stack>
             <Toast />
             <StatusBar style="auto" />
@@ -171,5 +202,6 @@ export default function RootLayout() {
         </Host>
       </GestureHandlerRootView>
     </UserInactivityProvider>
+    </CurrencyProvider>
   );
 }

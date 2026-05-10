@@ -1,6 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import {
   cancelClosure,
   closureMonth,
@@ -10,9 +11,9 @@ import {
   isMonthClosed,
   listClosures,
 } from "@/src/db/repositories/closureRepo";
-import { FONT_FAMILY } from "@/src/theme/fonts";
 import { scheduleClosureReminder } from "@/src/notifications/closureReminder";
-import { formatMoney } from "@/src/utils/format";
+import { getSymbol } from "@/src/services/currency/currencyStore";
+import { FONT_FAMILY } from "@/src/theme/fonts";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -47,6 +48,7 @@ const MONTH_NAMES = [
 
 export default function ClotureMois() {
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount } = useCurrency();
   const bgCard = useThemeColor(
     { light: "#fff", dark: "#2a2a2a" },
     "background",
@@ -162,16 +164,16 @@ export default function ClotureMois() {
 
     const diffLabel =
       difference > 0
-        ? `+${formatMoney(String(difference))} FCFA (entrée)`
+        ? `+${displayAmount(Number(difference))} (entrée)`
         : difference < 0
-          ? `-${formatMoney(String(Math.abs(difference)))} FCFA (dépense)`
+          ? `-${displayAmount(Number(Math.abs(difference)))} (dépense)`
           : "Aucun écart";
 
     Alert.alert(
       "Confirmer la clôture",
       `Mois : ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}\n` +
-        `Solde théorique : ${formatMoney(String(theoreticalBalance))} FCFA\n` +
-        `Solde physique : ${formatMoney(physicalInput)} FCFA\n` +
+        `Solde théorique : ${displayAmount(Number(theoreticalBalance))}\n` +
+        `Solde physique : ${displayAmount(Number(physicalInput) || 0)}\n` +
         `Écart : ${diffLabel}\n\n` +
         `Cette action créera une transaction d'ajustement si l'écart est non nul.`,
       [
@@ -280,7 +282,7 @@ export default function ClotureMois() {
                 { color: theoreticalBalance >= 0 ? "#34C759" : "#FF3B30" },
               ]}
             >
-              {formatMoney(String(theoreticalBalance))} FCFA
+              {displayAmount(Number(theoreticalBalance))}
             </Text>
             <Text style={[styles.cardHint, { color: COLORS.gray }]}>
               Calculé à partir de toutes vos transactions jusqu'à fin{" "}
@@ -345,7 +347,7 @@ export default function ClotureMois() {
                   Solde physique
                 </Text>
                 <Text style={[styles.closedValue, { color }]}>
-                  {formatMoney(String(existingClosure.physical_balance))} FCFA
+                  {displayAmount(Number(existingClosure.physical_balance))}
                 </Text>
               </View>
 
@@ -365,7 +367,7 @@ export default function ClotureMois() {
                   ]}
                 >
                   {existingClosure.difference > 0 ? "+" : ""}
-                  {formatMoney(String(existingClosure.difference))} FCFA
+                  {displayAmount(Number(existingClosure.difference))}
                 </Text>
               </View>
 
@@ -402,7 +404,7 @@ export default function ClotureMois() {
                   onChangeText={setPhysicalInput}
                 />
                 <Text style={[styles.inputSuffix, { color: COLORS.gray }]}>
-                  FCFA
+                  {getSymbol()}
                 </Text>
               </View>
 
@@ -455,7 +457,7 @@ export default function ClotureMois() {
                       ]}
                     >
                       {difference > 0 ? "+" : ""}
-                      {formatMoney(String(difference))} FCFA
+                      {displayAmount(Number(difference))}
                     </Text>
                     <Text
                       style={{
@@ -534,7 +536,7 @@ export default function ClotureMois() {
                         fontFamily: FONT_FAMILY.regular,
                       }}
                     >
-                      Physique : {formatMoney(String(c.physical_balance))} FCFA
+                      Physique : {displayAmount(Number(c.physical_balance))}
                     </Text>
                   </View>
                   <Text
@@ -551,7 +553,7 @@ export default function ClotureMois() {
                     ]}
                   >
                     {c.difference > 0 ? "+" : ""}
-                    {formatMoney(String(c.difference))}
+                    {displayAmount(Number(c.difference))}
                   </Text>
                 </TouchableOpacity>
               ))}

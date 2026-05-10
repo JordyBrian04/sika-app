@@ -8,6 +8,7 @@ import {
   listeCategories,
   updateCategory,
 } from "@/src/db/repositories/category";
+import { requirePro } from "@/src/services/cloud/planCheck";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
 import { useAppTextColor } from "@/src/utils/colos";
@@ -71,6 +72,8 @@ export default function Categories() {
   );
 
   const handleDelete = async (id: number): Promise<void> => {
+    if (!(await requirePro("La suppression de catégories"))) return;
+
     Alert.alert(
       "Supprimer",
       "Êtes-vous sûr de vouloir supprimer cette catégorie ?",
@@ -81,7 +84,6 @@ export default function Categories() {
           onPress: async () => {
             setLoading2(true);
             try {
-              // TODO: Implement delete function in category repository
               await deleteCategory(id);
               await fetchCategories();
             } catch (error) {
@@ -240,12 +242,14 @@ export default function Categories() {
     );
   };
 
-  const handleEdit = (category: CategoryInput) => {
+  const handleEdit = async (category: CategoryInput) => {
+    if (!(await requirePro("La modification de catégories"))) return;
     setCategorieDatas(category);
     openModal("categorieModal");
   };
 
   const handleSave = async () => {
+    if (!(await requirePro("La gestion de catégories personnalisées"))) return;
     if (!categorieDatas.name) {
       alert("Veuillez entrer un nom pour la catégorie.");
       return;

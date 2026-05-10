@@ -2,6 +2,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { getBudgetDetailByID } from "@/src/db/repositories/budgetRepo";
 import {
   getLastSixMonthsSpendingByCategory,
@@ -10,7 +11,6 @@ import {
 } from "@/src/db/repositories/transactions";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
-import { formatMoney } from "@/src/utils/format";
 import { AntDesign, Feather, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -150,6 +150,7 @@ const DetailBudget = () => {
   );
   //   console.log("DetailBudget params", params);
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount } = useCurrency();
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ThemedView style={{ flex: 1 }}>
@@ -329,7 +330,7 @@ const DetailBudget = () => {
                     color: COLORS.red,
                   }}
                 >
-                  {formatMoney(detail?.totalSpent) || 0} CFA
+                  {displayAmount(detail?.totalSpent || 0)}
                 </ThemedText>
               </View>
               <View
@@ -345,7 +346,7 @@ const DetailBudget = () => {
                 <ThemedText
                   style={{ fontFamily: FONT_FAMILY.bold, fontSize: 18 }}
                 >
-                  {formatMoney(detail?.monthlyLimit) || 0} CFA
+                  {displayAmount(detail?.monthlyLimit || 0)}
                 </ThemedText>
               </View>
             </View>
@@ -393,7 +394,7 @@ const DetailBudget = () => {
                 >
                   {detail?.remaining > 0 ? (
                     <Text style={{ color: COLORS.green }}>
-                      {`${formatMoney(detail.remaining)} CFA restants`}
+                      {`${displayAmount(detail.remaining)} restants`}
                     </Text>
                   ) : (
                     <Text style={{ color: COLORS.red }}>Budget dépassé</Text>
@@ -578,7 +579,7 @@ const DetailBudget = () => {
                             //   color === "#FFFFFF" ? COLORS.dark : COLORS.white,
                           }}
                         >
-                          {formatMoney(trans.amount)} CFA
+                          {displayAmount(trans.amount)}
                         </ThemedText>
                       </TouchableOpacity>
                     ))}

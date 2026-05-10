@@ -1,6 +1,10 @@
 import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { displayMoney } from "@/src/utils/format";
+import { useCurrency } from "@/src/context/CurrencyContext";
+import { convertToFCFA, fetchRates } from "@/src/services/currency/currencyService";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import {
   addBudget,
@@ -9,6 +13,8 @@ import {
   getCategoryMonthlyExpense,
 } from "@/src/db/repositories/budgetRepo";
 import { listeCategories } from "@/src/db/repositories/category";
+import { getOne } from "@/src/db";
+import { requirePro, isUserPro } from "@/src/services/cloud/planCheck";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { AntDesign, Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -35,6 +41,19 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export default function TabTwoScreen() {
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount, currency: globalCurrency } = useCurrency();
+
+  // Convertit montant saisi (devise courante) → FCFA
+  const toFCFA = async (amount: number): Promise<number> => {
+    if (globalCurrency === "XOF" || globalCurrency === "XAF") return amount;
+    try {
+      const rates = await fetchRates();
+      return convertToFCFA(amount, globalCurrency, rates);
+    } catch {
+      const FALLBACK: Record<string, number> = { USD: 600, EUR: 655.96 };
+      return amount * (FALLBACK[globalCurrency] ?? 1);
+    }
+  };
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
   const [datas, setDatas] = useState<any[]>([]);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -156,19 +175,35 @@ export default function TabTwoScreen() {
     setLoading(true);
     try {
       if (action === "add") {
+        // Limite gratuit : 3 budgets par mois
+        const pro = await isUserPro();
+        if (!pro) {
+          const countRow = await getOne<{ c: number }>(
+            `SELECT COUNT(*) as c FROM budgets WHERE month = ? AND year = ?`,
+            [budgetDataset.mois, budgetDataset.annee]
+          );
+          if ((countRow?.c ?? 0) >= 3) {
+            setLoading(false);
+            await requirePro("Les budgets illimités (tu as atteint la limite de 3 budgets/mois)");
+            return;
+          }
+        }
+        // Conversion vers FCFA (stockage interne)
+        const montantFCFA = await toFCFA(parseFloat(budgetDataset.montant) || 0);
         await addBudget(
           budgetDataset.mois,
           budgetDataset.annee,
           budgetDataset.categorie,
-          budgetDataset.montant,
+          montantFCFA,
         );
       } else {
+        const montantFCFA = await toFCFA(parseFloat(budgetDataset.montant) || 0);
         await editBudget(
           budgetDataset.id,
           budgetDataset.mois,
           budgetDataset.annee,
           budgetDataset.categorie,
-          budgetDataset.montant,
+          montantFCFA,
         );
       }
       resetDataset();
@@ -343,9 +378,7 @@ export default function TabTwoScreen() {
           <View style={{ alignItems: "center", justifyContent: "center" }}>
             <ThemedText
               style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 12 }}
-            >
-              Dépensé (CFA)
-            </ThemedText>
+            >{`Dépensé (${getSymbol()})`}</ThemedText>
             <Text
               style={{
                 fontFamily: FONT_FAMILY.bold,
@@ -354,15 +387,13 @@ export default function TabTwoScreen() {
                 textAlign: "center",
               }}
             >
-              {item.totalSpent.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")}
+              {displayAmount(item.totalSpent)}
             </Text>
           </View>
           <View style={{ alignItems: "center", justifyContent: "center" }}>
             <ThemedText
               style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 12 }}
-            >
-              Reste (CFA)
-            </ThemedText>
+            >{`Reste (${getSymbol()})`}</ThemedText>
             <Text
               style={{
                 fontFamily: FONT_FAMILY.bold,
@@ -371,15 +402,13 @@ export default function TabTwoScreen() {
                 textAlign: "center",
               }}
             >
-              {item.remaining.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ")}
+              {displayAmount(item.remaining)}
             </Text>
           </View>
           <View style={{ alignItems: "center", justifyContent: "center" }}>
             <ThemedText
               style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 12 }}
-            >
-              Limite (CFA)
-            </ThemedText>
+            >{`Limite (${getSymbol()})`}</ThemedText>
             <Text
               style={{
                 fontFamily: FONT_FAMILY.bold,
@@ -388,9 +417,7 @@ export default function TabTwoScreen() {
                 textAlign: "center",
               }}
             >
-              {item.monthlyLimit
-                .toFixed(0)
-                .replace(/\B(?=(\d{3})+(?!\d))/g, " ")}
+              {displayAmount(item.monthlyLimit)}
             </Text>
           </View>
         </View>
@@ -706,16 +733,17 @@ export default function TabTwoScreen() {
               Montant limite
             </ThemedText>
             <TextInput
-              placeholder="0"
+              placeholder={`0 ${getSymbol()}`}
               placeholderTextColor={color}
               value={budgetDataset.montant.toString()}
               onChangeText={(text) =>
                 setBudgetDataset((prev: any) => ({
                   ...prev,
-                  montant: text.replace(/\D/g, ""),
+                  // Autoriser chiffres + virgule/point décimal
+                  montant: text.replace(/[^0-9.,]/g, "").replace(",", "."),
                 }))
               }
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
               style={{
                 borderWidth: 1,
                 borderColor: "#E0E0E0",

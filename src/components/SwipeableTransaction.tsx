@@ -11,8 +11,8 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useCurrency } from "../context/CurrencyContext";
 import { FONT_FAMILY } from "../theme/fonts";
-import { formatMoney } from "../utils/format";
 
 const ACTION_WIDTH = 80;
 const MAX_LEFT_SWIPE = ACTION_WIDTH * 2;
@@ -23,6 +23,7 @@ const SwipeableTransaction = ({ trans, onPress, onPressEdit }: any) => {
   // 1. Chaque ligne a maintenant sa propre valeur partagée
   const SwipeAnimatedValue = useSharedValue(0);
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount } = useCurrency();
 
   // 2. Chaque ligne a son propre style animé
   const SwipeAnimatedStyle = useAnimatedStyle(() => {
@@ -204,7 +205,7 @@ const SwipeableTransaction = ({ trans, onPress, onPressEdit }: any) => {
             <ThemedText
               style={{ fontSize: 14, fontFamily: FONT_FAMILY.semibold }}
             >
-              {formatMoney(trans.amount)} CFA
+              {displayAmount(trans.amount)}
             </ThemedText>
           </Pressable>
         </Animated.View>

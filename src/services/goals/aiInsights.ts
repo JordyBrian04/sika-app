@@ -1,3 +1,4 @@
+import { formatWithCurrency } from "@/src/services/currency/currencyStore";
 import { all, getOne } from "@/src/db";
 import {
   getBudgetVsSpendForMonth,
@@ -361,7 +362,7 @@ export async function getAIInsightsTop3(input?: {
     recommendation:
       txCount < 10
         ? "Ajoute encore quelques transactions cette semaine pour que l’analyse devienne fiable."
-        : "Fixe une enveloppe week-end (ex: 5 000–10 000 FCFA) et active une alerte quand tu atteins 70%.",
+        : `Fixe une enveloppe week-end (ex: ${formatWithCurrency(5000)}–${formatWithCurrency(10000)} FCFA) et active une alerte quand tu atteins 70%.`,
     confidence: confidenceFromData({
       txCount,
       daySpan,
@@ -427,7 +428,7 @@ export async function getAIInsightsTop3(input?: {
     recommendation: !focusCatId
       ? "Choisis ta catégorie principale de “tentation” (Loisirs, Livraison, Abos) et je te calcule l’impact exact."
       : savingSpeed <= 0
-        ? "Objectif mini : repasser en épargne nette positive (même +500 FCFA/jour). Commence par couper 1 dépense non essentielle."
+        ? `Objectif mini : repasser en épargne nette positive (même ${formatWithCurrency(500)}/jour). Commence par couper 1 dépense non essentielle.`
         : `Défi : baisse cette catégorie de 15% pendant 2 semaines → tu récupères plusieurs jours d’avance.`,
     confidence: confidenceFromData({ txCount, daySpan, hasBudget: false }),
     impact: clamp(delayDays ?? 10, 10, 90),
@@ -509,9 +510,9 @@ export async function buildBudgetInsight(params: {
   const mainPct = Math.round(main.ratio * 100);
   const rec =
     over.length > 0
-      ? `Stop “dégâts” : bloque les dépenses sur **${main.category_name}** 48h, et ajuste un plafond “reste du mois” (ex: ${Math.max(0, main.remaining)} FCFA).`
+      ? `Stop “dégâts” : bloque les dépenses sur **${main.category_name}** 48h, et ajuste un plafond “reste du mois” (ex: ${formatWithCurrency(Math.max(0, main.remaining))}).`
       : near.length > 0
-        ? `Mode contrôle : limite **${main.category_name}** à ${Math.max(0, main.remaining)} FCFA jusqu’à la fin du mois (≈ ${mainPct}% déjà consommé).`
+        ? `Mode contrôle : limite **${main.category_name}** à ${(formatWithCurrency(Math.max(0, main.remaining)))} jusqu’à la fin du mois (≈ ${mainPct}% déjà consommé).`
         : `Continue comme ça. Si tu veux booster l’épargne, réduis la catégorie #1 de 5–10%.`;
 
   const impact = clamp(

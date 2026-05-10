@@ -12,7 +12,8 @@ import {
 } from "@/src/db/repositories/transactions";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useModalQueue } from "@/src/ui/components/useModalQueue";
-import { formatMoney } from "@/src/utils/format";
+import { formatMoney, displayMoney } from "@/src/utils/format";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import {
   AntDesign,
   Feather,
@@ -38,9 +39,11 @@ import {
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 
 const ListeTransactions = () => {
   const color = useThemeColor({ light: "#000000", dark: "#FFFFFF" }, "text");
+  const { displayAmount } = useCurrency();
   const [open, setOpen] = useState(false);
   const [open2, setOpen2] = useState(false);
   const [date, setDate] = useState(new Date());
@@ -482,9 +485,7 @@ const ListeTransactions = () => {
                   justifyContent: "center",
                 }}
               >
-                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>
-                  Montant (CFA)
-                </ThemedText>
+                <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>{`Montant (${getSymbol()})`}</ThemedText>
                 <TextInput
                   placeholder="0"
                   keyboardType="numeric"
@@ -1200,7 +1201,7 @@ const ListeTransactions = () => {
                     }}
                   >
                     {item.dayBalance > 0 ? "+" : ""}
-                    {formatMoney(String(item.dayBalance))} FCFA
+                    {displayAmount(Number(item.dayBalance))}
                   </Text>
                 </View>
 
@@ -1360,7 +1361,7 @@ const ListeTransactions = () => {
                   //       fontFamily: FONT_FAMILY.semibold,
                   //     }}
                   //   >
-                  //     {formatMoney(trans.amount)} CFA
+                  //     {displayAmount(trans.amount)}
                   //   </ThemedText>
                   // </TouchableOpacity>
                 ))}
