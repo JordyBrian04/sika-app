@@ -14,7 +14,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
-      "usesIcloudStorage": true
+      "usesIcloudStorage": false
     },
     "android": {
       "adaptiveIcon": {
@@ -79,7 +79,7 @@
       [
         "expo-document-picker",
         {
-          "iCloudContainerEnvironment": "Development"
+          "iCloudContainerEnvironment": "Production"
         }
       ],
       [

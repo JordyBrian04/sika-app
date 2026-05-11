@@ -34,6 +34,7 @@ import * as Sharing from "expo-sharing";
 import React, { useCallback, useRef, useState } from "react";
 import {
   Alert,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -369,8 +370,8 @@ export default function TabThreeScreen() {
     if (!capturePending || !shareCardData) return;
     const run = async () => {
       try {
-        // Laisser React rendre la carte avant de capturer
-        await new Promise(r => setTimeout(r, 250));
+        // Laisser le Modal se rendre complètement (Android est plus lent qu'iOS)
+        await new Promise(r => setTimeout(r, Platform.OS === "android" ? 400 : 250));
         const uri = await captureRef(shareCardRef, { format: "png", quality: 1 });
         const canShare = await Sharing.isAvailableAsync();
         if (!canShare) { Alert.alert("Erreur", "Le partage n'est pas disponible."); return; }
@@ -1601,12 +1602,23 @@ export default function TabThreeScreen() {
           )}
         </ScrollView>
       </ThemedView>
-      {/* Vue hors-écran pour la capture PNG */}
-      {shareCardData && (
-        <View style={{ position: "absolute", top: -2000, left: 0, width: 375, height: 667 }}>
-          <ShareCardView ref={shareCardRef} data={shareCardData} />
+      {/* Modal transparent pour la capture PNG (Android exige une vue dans la zone visible) */}
+      <Modal
+        visible={!!shareCardData}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+      >
+        <View style={{ flex: 1, backgroundColor: "transparent" }}>
+          <View
+            ref={shareCardRef}
+            collapsable={false}
+            style={{ position: "absolute", top: 0, left: 0, width: 375, height: 667 }}
+          >
+            {shareCardData && <ShareCardView data={shareCardData} />}
+          </View>
         </View>
-      )}
+      </Modal>
     </SafeAreaView>
   );
 }

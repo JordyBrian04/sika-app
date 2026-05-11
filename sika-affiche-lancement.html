@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sika App — Affiche</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: #f0ede8;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        font-family:
+          "Plus Jakarta Sans",
+          -apple-system,
+          sans-serif;
+      }
+
+      .poster {
+        width: 420px;
+        background: #ffffff;
+        border-radius: 24px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      /* Bande drapeau ivoirien en haut */
+      .flag-bar {
+        display: flex;
+        height: 7px;
+      }
+      .flag-bar .orange {
+        flex: 1;
+        background: #f47920;
+      }
+      .flag-bar .white {
+        flex: 1;
+        background: #ffffff;
+        border-top: 1px solid #e8e8e8;
+      }
+      .flag-bar .green {
+        flex: 1;
+        background: #009a44;
+      }
+
+      .inner {
+        padding: 44px 40px 40px;
+      }
+
+      /* Logo */
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 48px;
+      }
+      .logo-icon {
+        width: 38px;
+        height: 38px;
+        background: #f47920;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+      }
+      .logo-name {
+        font-size: 22px;
+        font-weight: 800;
+        color: #1a1a1a;
+        letter-spacing: -0.5px;
+      }
+      .logo-badge {
+        font-size: 9px;
+        font-weight: 700;
+        color: #f47920;
+        border: 1px solid #f47920;
+        padding: 2px 8px;
+        border-radius: 20px;
+        letter-spacing: 1.5px;
+        margin-left: 4px;
+      }
+
+      /* Accroche */
+      .headline {
+        margin-bottom: 20px;
+      }
+      .headline h1 {
+        font-size: 36px;
+        font-weight: 800;
+        color: #1a1a1a;
+        line-height: 1.15;
+        letter-spacing: -0.8px;
+      }
+      .headline h1 em {
+        font-style: normal;
+        color: #f47920;
+      }
+
+      /* Description */
+      .description {
+        font-size: 15px;
+        color: #555;
+        line-height: 1.7;
+        margin-bottom: 36px;
+        border-left: 3px solid #f47920;
+        padding-left: 16px;
+      }
+
+      /* Séparateur */
+      .divider {
+        width: 100%;
+        height: 1px;
+        background: #f0ede8;
+        margin-bottom: 28px;
+      }
+
+      /* Points clés */
+      .points {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-bottom: 36px;
+      }
+      .point {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+      }
+      .point-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #f47920;
+        flex-shrink: 0;
+        margin-top: 7px;
+      }
+      .point-text {
+        font-size: 14px;
+        color: #333;
+        line-height: 1.5;
+      }
+      .point-text strong {
+        color: #1a1a1a;
+        font-weight: 700;
+      }
+
+      /* CTA */
+      .cta {
+        background: #f47920;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 16px 24px;
+        font-size: 15px;
+        font-weight: 700;
+        width: 100%;
+        cursor: pointer;
+        font-family: inherit;
+        letter-spacing: -0.2px;
+        margin-bottom: 12px;
+      }
+      .platforms {
+        text-align: center;
+        font-size: 12px;
+        color: #aaa;
+      }
+
+      /* Footer -->*/
+      .footer-bar {
+        display: flex;
+        height: 5px;
+      }
+      .footer-bar .orange {
+        flex: 1;
+        background: #f47920;
+      }
+      .footer-bar .white {
+        flex: 1;
+        background: #e8e8e8;
+      }
+      .footer-bar .green {
+        flex: 1;
+        background: #009a44;
+      }
+
+      /* Boutons */
+      .export-bar {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .export-btn {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        color: #555;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 8px 16px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .export-btn:hover {
+        background: #f5f5f5;
+      }
+
+      @media print {
+        body {
+          background: white;
+          padding: 0;
+        }
+        .export-bar {
+          display: none;
+        }
+        .poster {
+          box-shadow: none;
+          border-radius: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="poster" id="poster">
+      <!-- Bande drapeau haut -->
+      <div class="flag-bar">
+        <div class="orange"></div>
+        <div class="white"></div>
+        <div class="green"></div>
+      </div>
+
+      <div class="inner">
+        <!-- Logo -->
+        <div class="logo">
+          <div class="logo-icon">
+            <img
+              src="./assets/images/stats.png"
+              alt="Logo Sika App"
+              width="30px"
+              height="30px"
+            />
+          </div>
+          <span class="logo-name">Sika App</span>
+          <span class="logo-badge">BÊTA</span>
+        </div>
+
+        <!-- Accroche -->
+        <div class="headline">
+          <h1>Ton argent,<br /><em>enfin sous contrôle.</em></h1>
+        </div>
+
+        <!-- Description -->
+        <p class="description">
+          Sika App t'aide à suivre tes dépenses, respecter tes budgets et
+          atteindre tes objectifs d'épargne — simplement, depuis ton téléphone.
+        </p>
+
+        <div class="divider"></div>
+
+        <!-- Points clés -->
+        <div class="points">
+          <div class="point">
+            <div class="point-dot"></div>
+            <div class="point-text">
+              <strong>Budgets intelligents</strong> — reçois une alerte avant de
+              dépasser
+            </div>
+          </div>
+          <div class="point">
+            <div class="point-dot"></div>
+            <div class="point-text">
+              <strong>Objectifs d'épargne</strong> — fixe un but et suis ta
+              progression semaine après semaine
+            </div>
+          </div>
+          <div class="point">
+            <div class="point-dot"></div>
+            <div class="point-text">
+              <strong>Score financier</strong> — mesure tes progrès avec un
+              score personnalisé chaque mois
+            </div>
+          </div>
+          <div class="point">
+            <div class="point-dot"></div>
+            <div class="point-text">
+              <strong>100% adapté à l'Afrique</strong> — en FCFA, pensé pour nos
+              réalités du quotidien
+            </div>
+          </div>
+        </div>
+
+        <!-- CTA -->
+        <!-- <button class="cta">Rejoins la bêta — C'est gratuit</button> -->
+        <p class="platforms">Disponible sur Android &nbsp;·&nbsp; iOS</p>
+      </div>
+
+      <!-- Bande drapeau bas -->
+      <div class="footer-bar">
+        <div class="orange"></div>
+        <div class="white"></div>
+        <div class="green"></div>
+      </div>
+    </div>
+
+    <div class="export-bar">
+      <button class="export-btn" onclick="window.print()">
+        🖨️ Enregistrer en PDF
+      </button>
+    </div>
+  </body>
+</html>

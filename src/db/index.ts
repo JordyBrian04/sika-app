@@ -77,17 +77,24 @@ export async function migrate() {
         try {
           await runSql(step);
         } catch (e: any) {
-          const msg: string = e?.message ?? "";
-          // ALTER TABLE ADD COLUMN est non-idempotent en SQLite.
+          // expo-sqlite v16 enwrappe les erreurs natives :
+          // e.message = "Call to function 'NativeDatabase.prepareAsync' has been rejected."
+          // e.cause?.message = "Error code 1: duplicate column name: updated_at"
+          // On cherche le message dans toute la chaîne d'erreur.
+          const msg: string = [
+            e?.message ?? "",
+            e?.cause?.message ?? "",
+            String(e ?? ""),
+          ].join(" ");
+
           // Cas 1 : colonne déjà présente (migration partiellement appliquée)
           if (msg.includes("duplicate column name")) {
-            console.warn(`[migrate] colonne déjà existante, ignoré : ${msg}`);
+            console.warn(`[migrate] colonne déjà existante, ignoré`);
             continue;
           }
           // Cas 2 : default non-constant (ex: DEFAULT (datetime('now')))
-          // → impossible dans ALTER TABLE, on continue sans default
           if (msg.includes("non-constant default") || msg.includes("Cannot add a column with non-constant default")) {
-            console.warn(`[migrate] default non-constant ignoré : ${msg}`);
+            console.warn(`[migrate] default non-constant ignoré`);
             continue;
           }
           // Toute autre erreur est fatale

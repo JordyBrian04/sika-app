@@ -103,7 +103,7 @@ const Page = () => {
   useEffect(() => {
     if (code.length === 6 && user.length > 0) {
       if (code.join("") === user[0].pass) {
-        router.navigate("/(tabs)");
+        router.replace("/(tabs)");
         setCode([]);
       } else {
         offset.value = withSequence(
@@ -136,7 +136,9 @@ const Page = () => {
         disableDeviceFallback: false,
       });
       if (success) {
-        router.navigate("/(tabs)");
+        // replace (pas navigate) pour éviter l'écran noir sur iOS
+        // après la fermeture du dialogue biométrique
+        setTimeout(() => router.replace("/(tabs)"), 50);
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }

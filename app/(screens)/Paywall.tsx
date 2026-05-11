@@ -98,10 +98,20 @@ export default function Paywall() {
 
   const handlePurchase = async () => {
     if (!showPhoneInput) {
-      // Pré-remplir avec le numéro cloud si disponible
-      const row = await getOne<{ cloud_phone: string | null }>(
-        `SELECT cloud_phone FROM user_profile WHERE id = 1`
+      // Vérifier que l'utilisateur a un compte cloud (token requis par le backend)
+      const row = await getOne<{ access_token: string | null; cloud_phone: string | null }>(
+        `SELECT access_token, cloud_phone FROM user_profile WHERE id = 1`
       );
+
+      if (!row?.access_token) {
+        Alert.alert(
+          "Connexion requise",
+          "Tu dois connecter ton compte Sika Cloud pour souscrire à Sika Pro.\n\nVa dans Paramètres → Créer un compte ou Se connecter, puis reviens ici.",
+          [{ text: "Compris" }]
+        );
+        return;
+      }
+
       if (row?.cloud_phone) setPhone(row.cloud_phone);
       setShowPhoneInput(true);
       return;
