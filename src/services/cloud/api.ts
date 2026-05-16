@@ -8,8 +8,8 @@ import { getOne, runSql } from "@/src/db";
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 export const API_BASE = __DEV__
-  ? "http://192.168.1.6:3000"
-  : "https://sika-app-node.onrender.com"; // À remplacer en production
+  ? "http://192.168.1.189:3000"
+  : "https://api.sika-app.org";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

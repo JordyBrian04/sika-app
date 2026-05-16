@@ -1,6 +1,6 @@
 # SIKA APP — Mémoire Projet
 
-> Dernière mise à jour : 2026-05-04 (session cloud sync)
+> Dernière mise à jour : 2026-05-15 (migration VPS Contabo + domaine sika-app.org)
 
 ## 1. Vue d'ensemble
 
@@ -287,6 +287,11 @@ src/
 - **Bundle ID :** com.brianjordy.sikaapp
 - **EAS Project ID :** 5f0eb089-138c-4a0d-84d1-430a292781aa
 - **Scheme :** sikaapp
+- **Domaine :** sika-app.org (Namecheap)
+- **API production :** https://api.sika-app.org
+- **Site vitrine :** https://sika-app.org
+- **Hébergement :** VPS Contabo (Nginx + PM2 + Let's Encrypt)
+- **Ancien hébergement :** Render (suspendu)
 
 ## 10. Décisions architecturales
 
@@ -369,3 +374,24 @@ Endpoints ajoutés :
 - **expo-print non installé** : `reportService.ts` utilise expo-file-system (génère HTML). Pour vrai PDF : `npx expo install expo-print` puis adapter le service.
 - **currency_rates** : stocké en JSON dans `user_profile.currency_rates` (migration 4).
 - **EAS OTA** : pour publier une update : `eas update --channel production --message "Fix bugs"`
+
+## 14. Fix sync complet (session 2026-05-12)
+
+### Problèmes identifiés et corrigés
+
+| Problème | Cause | Fix |
+|---|---|---|
+| Données manquantes après sync | Ordre des tables non garanti — enfants pullés avant parents, FK non résolvable → skip silencieux | Tables ordonnées parent→enfant : categories, saving_goals, recurring_payments, transactions, budgets, goal_*, closures |
+| Premier sync sur nouvel appareil incomplet | Pull avec `neq("device_id")` filtrait les données même quand `last_sync_at=null` | Filtre `neq(device_id)` appliqué UNIQUEMENT en sync incrémental (quand `last_sync_at` est fourni) |
+| Données tronquées sur gros volumes | Supabase limite à 1000 lignes par requête, pas de pagination | Ajout boucle de pagination avec `range(from, from+PAGE_SIZE-1)` et `count: "exact"` |
+| Push lent et fragile | Chaque row envoyé individuellement en upsert | Batch upsert (toutes les rows d'une table en une seule requête), fallback un par un si le batch échoue |
+| Soft-deletes ignorés au pull | Enregistrements avec `deleted_at` pullés mais pas supprimés localement | Si `deleted_at` est set, `DELETE FROM table WHERE sync_id = ?` localement |
+| Timing last_sync_at | `synced_at` calculé après le pull → fenêtre de perte de données | `synced_at` calculé AVANT de lire les données côté serveur |
+| Erreurs d'insertion silencieuses | `.catch(() => {})` masquait les erreurs | Erreurs propagées et loguées dans le résultat de sync |
+
+### Fichiers modifiés
+
+| Fichier | Changements |
+|---|---|
+| `sika-app-node/src/routes/sync.ts` | Ordre des tables, batch upsert, pagination pull, timing synced_at, gestion soft-delete |
+| `sika-app/src/services/cloud/syncService.ts` | Ordre parent→enfant, gestion soft-delete au pull, erreurs non silencieuses, batch update sync_status |

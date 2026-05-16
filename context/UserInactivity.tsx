@@ -33,25 +33,24 @@ export const UserInactivityProvider = ({ children }: any) => {
   const handleAppStateChange = (nextAppState: any) => {
     console.log("AppState changed to", appState.current, nextAppState);
 
-    if (nextAppState === "inactive") {
+    if (nextAppState === "background") {
+      // Mise en arrière-plan réelle → masquer le contenu (confidentialité)
       router.push("/(modals)/white");
-    } else {
+      recordStartTime();
+    } else if (nextAppState === "active" && appState.current === "background") {
+      // Retour depuis l'arrière-plan → supprimer le modal blanc
       if (router.canGoBack()) {
         router.back();
       }
-    }
-
-    if (nextAppState === "background") {
-      recordStartTime();
-    } else if (
-      nextAppState === "active" &&
-      appState.current.match(/background/)
-    ) {
+      // Vérifier si on doit verrouiller
       const elapsed = Date.now() - (storage?.getNumber("startTime") || 0);
       if (elapsed >= LOCK_TIME) {
         router.push("/");
       }
     }
+    // "inactive" (dialogs biométriques, appels entrants, etc.) → on ne fait rien.
+    // Sans ça, Face ID pousse le modal blanc puis router.back() revient
+    // sur le lock screen au moment où router.replace("/(tabs)") s'exécute.
 
     appState.current = nextAppState;
   };

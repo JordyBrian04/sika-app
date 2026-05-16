@@ -26,13 +26,12 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { isCloudAuthenticated } from "../src/services/cloud/authService";
+import { runSql } from "../src/db";
 import {
   createOrUpdateUserProfile,
   getUserProfile,
   UserProfile,
 } from "../src/db/repositories/userRepo";
-import { runSql } from "../src/db";
 import {
   SETUP_CURRENCIES,
   type Currency,
@@ -138,7 +137,7 @@ const Page = () => {
       if (success) {
         // replace (pas navigate) pour éviter l'écran noir sur iOS
         // après la fermeture du dialogue biométrique
-        setTimeout(() => router.replace("/(tabs)"), 50);
+        router.replace("/(tabs)")
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }

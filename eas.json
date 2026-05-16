@@ -13,23 +13,35 @@
         "buildType": "apk"
       }
     },
-    "preview2": {
-      "android": {
-        "gradleCommand": ":app:assembleRelease"
+    "testflight": {
+      "autoIncrement": true,
+      "distribution": "store",
+      "channel": "production",
+      "ios": {
+        "buildConfiguration": "Release"
       }
-    },
-    "preview3": {
-      "developmentClient": true
-    },
-    "preview4": {
-      "distribution": "internal"
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "distribution": "store",
+      "channel": "production",
+      "ios": {
+        "buildConfiguration": "Release"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "brian.gboko@southlandglobal.africa",
+        "language": "fr-FR"
+      }
+    },
+    "testflight": {
+      "ios": {
+        "appleId": "brian.gboko@southlandglobal.africa",
+        "language": "fr-FR"
+      }
+    }
   }
 }

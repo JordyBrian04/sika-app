@@ -2,9 +2,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import { useIsPro } from "@/hooks/useIsPro";
-import { useCurrency } from "@/src/context/CurrencyContext";
-import { SETUP_CURRENCIES } from "@/src/services/currency/currencyService";
 import ExpenseCalendar60Days from "@/src/components/ExpenseCalendar60Days";
+import { useCurrency } from "@/src/context/CurrencyContext";
 import { listBadgesWithStatus } from "@/src/db/repositories/badgesRepo";
 import {
   backupDatabaseToShare,
@@ -16,11 +15,12 @@ import {
   getCloudProfile,
   logout,
 } from "@/src/services/cloud/authService";
-import { requirePro } from "@/src/services/cloud/planCheck";
 import { cancelSubscription, syncSubscriptionStatus } from "@/src/services/cloud/paymentService";
-import { generateMonthlyPDF, generateShareCard } from "@/src/services/reports/reportService";
+import { requirePro } from "@/src/services/cloud/planCheck";
 import { fullSync, SyncResult } from "@/src/services/cloud/syncService";
+import { SETUP_CURRENCIES } from "@/src/services/currency/currencyService";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
+import { generateMonthlyPDF, generateShareCard } from "@/src/services/reports/reportService";
 import {
   ExpenseDay,
   getExpenseCalendar60Days,
@@ -73,7 +73,7 @@ export default function TabFiveScreen() {
   const { currency: globalCurrency, isLocked, changeCurrency } = useCurrency();
 
   const onBackup = async () => {
-    setLoading("backup");
+    // setLoading("backup");
     try {
       await backupDatabaseToShare();
       Alert.alert("Sauvegarde", "Sauvegarde créée ✅");
@@ -85,7 +85,7 @@ export default function TabFiveScreen() {
   };
 
   const onRestore = async () => {
-    setLoading("restore");
+    // setLoading("restore");
     const res: any = await pickAndRestoreDatabase();
     setLoading(null);
 
@@ -109,7 +109,7 @@ export default function TabFiveScreen() {
   };
 
   const deleteAllData = async () => {
-    setLoading("delete");
+    // setLoading("delete");
     try {
       await resetAllDatas();
       Alert.alert("Données supprimées", "Toutes les données ont été effacées.");
