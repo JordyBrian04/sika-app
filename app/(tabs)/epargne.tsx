@@ -7,16 +7,16 @@ import { useCurrency } from "@/src/context/CurrencyContext";
 import { listeCategories } from "@/src/db/repositories/category";
 import { addTransaction } from "@/src/db/repositories/transactions";
 import { isUserPro, requirePro } from "@/src/services/cloud/planCheck";
-import { getSymbol } from "@/src/services/currency/currencyStore";
 import {
-  convertToFCFA,
-  fetchRates,
+    convertToFCFA,
+    fetchRates,
 } from "@/src/services/currency/currencyService";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 import { addContribution } from "@/src/services/goals/contributions";
 import {
-  createGoal,
-  getMinWeekly,
-  listGoals,
+    createGoal,
+    getMinWeekly,
+    listGoals,
 } from "@/src/services/goals/goalsRepo";
 import { getGoalPlan } from "@/src/services/goals/planner";
 import { autoCheckNoSpendDay } from "@/src/services/missions/noSpendDay";
@@ -25,26 +25,27 @@ import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useAppTextColor } from "@/src/utils/colos";
 import { diffDays, toYYYYMMDD } from "@/src/utils/goalDates";
 import {
-  Feather,
-  FontAwesome6,
-  Fontisto,
-  MaterialIcons,
+    Feather,
+    FontAwesome6,
+    Fontisto,
+    MaterialIcons,
 } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import SegmentedControl from "@react-native-segmented-control/segmented-control";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Platform,
-  RefreshControl,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Platform,
+    RefreshControl,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
@@ -71,6 +72,7 @@ export default function TabFourScreen() {
   const [selectedGoals, setSelectedGoals] = React.useState<any | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [loading2, setLoading2] = React.useState(false);
+  const [totalEpargne, setTotalEpargne] = React.useState(0);
   const percentage = useSharedValue(0);
   const end = useSharedValue(0);
   const ref = useRef<BottomSheetRefProps>(null);
@@ -80,6 +82,7 @@ export default function TabFourScreen() {
   const [date, setDate] = useState(new Date());
   const [date2, setDate2] = useState(new Date());
   const [date3, setDate3] = useState(new Date());
+  const [selectedIndex, setSelectedIndex] = React.useState(0);
   const OPTIONS = [
     { key: "low", label: "Basse" },
     { key: "medium", label: "Moyenne" },
@@ -109,6 +112,11 @@ export default function TabFourScreen() {
     date: new Date().toISOString().substring(0, 10),
   });
   const [amount, setAmount] = useState<number[]>([]);
+  const [caisseData, setCaisseData] = useState({
+    nom: "",
+    dates: "",
+    montant: "",
+  });
 
   const toggleDatePicker = () => {
     setOpen(!open);
@@ -165,7 +173,10 @@ export default function TabFourScreen() {
     if (type === "set") {
       if (Platform.OS === "android") {
         setOpen(false);
-        setEpargneData(prev => ({ ...prev, target_date: toLocalISODate(currentDate) }));
+        setEpargneData((prev) => ({
+          ...prev,
+          target_date: toLocalISODate(currentDate),
+        }));
       }
       // iOS : l'utilisateur confirme via le bouton Valider
     } else {
@@ -181,7 +192,10 @@ export default function TabFourScreen() {
     if (type === "set") {
       if (Platform.OS === "android") {
         setOpen2(false);
-        setEpargneData(prev => ({ ...prev, start_date: toLocalISODate(currentDate) }));
+        setEpargneData((prev) => ({
+          ...prev,
+          start_date: toLocalISODate(currentDate),
+        }));
       }
     } else {
       setOpen2(false);
@@ -195,7 +209,10 @@ export default function TabFourScreen() {
     if (type === "set") {
       if (Platform.OS === "android") {
         setOpen3(false);
-        setContribution(prev => ({ ...prev, date: toLocalISODate(currentDate) }));
+        setContribution((prev) => ({
+          ...prev,
+          date: toLocalISODate(currentDate),
+        }));
       }
     } else {
       setOpen3(false);
@@ -203,17 +220,17 @@ export default function TabFourScreen() {
   };
 
   const confirmIOSDate = () => {
-    setEpargneData(prev => ({ ...prev, target_date: toLocalISODate(date) }));
+    setEpargneData((prev) => ({ ...prev, target_date: toLocalISODate(date) }));
     setOpen(false);
   };
 
   const confirmIOSDate2 = () => {
-    setEpargneData(prev => ({ ...prev, start_date: toLocalISODate(date2) }));
+    setEpargneData((prev) => ({ ...prev, start_date: toLocalISODate(date2) }));
     setOpen2(false);
   };
 
   const confirmIOSDate3 = () => {
-    setContribution(prev => ({ ...prev, date: toLocalISODate(date3) }));
+    setContribution((prev) => ({ ...prev, date: toLocalISODate(date3) }));
     setOpen3(false);
   };
 
@@ -247,10 +264,21 @@ export default function TabFourScreen() {
     setWeeklyBoosts(pack.boosts);
 
     const allGoals = await listGoals();
+    let dejaEpargne = 0;
 
     const result = await Promise.all(
       allGoals.map(async (g) => {
         const details = await getGoalPlan(g.id);
+
+        dejaEpargne += details.saved_amount;
+
+        console.log(
+          "details",
+          details.saved_amount,
+          g.target_amount,
+          dejaEpargne,
+        );
+
         return {
           ...g,
           details,
@@ -260,6 +288,7 @@ export default function TabFourScreen() {
     );
 
     console.log("GOALS ", result);
+    setTotalEpargne(dejaEpargne);
     setGoals(result);
     setLoading(false);
   };
@@ -368,15 +397,23 @@ export default function TabFourScreen() {
         const activeGoals = await listGoals();
         if (activeGoals.length >= 2) {
           setLoading2(false);
-          await requirePro("Les objectifs illimités (tu as atteint la limite de 2 objectifs)");
+          await requirePro(
+            "Les objectifs illimités (tu as atteint la limite de 2 objectifs)",
+          );
           return;
         }
       }
 
       // Conversion vers FCFA (stockage interne)
-      const targetFCFA    = await toFCFA(parseFloat(epargneData.target_amount) || 0);
-      const currentFCFA   = await toFCFA(parseFloat(epargneData.current_amount) || 0);
-      const minWeeklyFCFA = await toFCFA(parseFloat(epargneData.min_weekly) || 0);
+      const targetFCFA = await toFCFA(
+        parseFloat(epargneData.target_amount) || 0,
+      );
+      const currentFCFA = await toFCFA(
+        parseFloat(epargneData.current_amount) || 0,
+      );
+      const minWeeklyFCFA = await toFCFA(
+        parseFloat(epargneData.min_weekly) || 0,
+      );
 
       const goalId = await createGoal({
         name: epargneData.name,
@@ -529,11 +566,36 @@ export default function TabFourScreen() {
                   onPress={() => {
                     setInputShown("add_goal");
                     toggleSheet();
-                    ref.current?.scrollTo(MAX_TRANSLATE_Y)
+                    ref.current?.scrollTo(MAX_TRANSLATE_Y);
                   }}
                 >
                   <Feather name="plus-circle" size={40} color={color} />
                 </TouchableOpacity>
+              </View>
+
+              <View
+                style={{
+                  backgroundColor:
+                    color === "#FFFFFF" ? COLORS.dark : COLORS.white,
+                  padding: 12,
+                  borderRadius: 15,
+                  gap: 8,
+                }}
+              >
+                <ThemedText
+                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 16 }}
+                >
+                  Déjà épargné
+                </ThemedText>
+                <Text
+                  style={{
+                    fontFamily: FONT_FAMILY.bold,
+                    fontSize: 34,
+                    color: color,
+                  }}
+                >
+                  {displayAmount(totalEpargne)}
+                </Text>
               </View>
 
               {/* Mission */}
@@ -937,554 +999,611 @@ export default function TabFourScreen() {
 
           {inputShown === "add_goal" ? (
             <>
-              <View style={{ gap: 18 }}>
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    Titre de l'épargne
-                  </ThemedText>
-                  <TextInput
-                    placeholder="Ex: Epargne fin d'année"
-                    placeholderTextColor={COLORS.gray}
-                    style={{
-                      padding: 16,
-                      borderWidth: 1,
-                      borderColor: COLORS.gray,
-                      color: color,
-                      borderRadius: 8,
-                      flex: 1,
-                      fontFamily: FONT_FAMILY.regular,
-                    }}
-                    value={epargneData.name}
-                    onChangeText={(e) =>
-                      setEpargneData((prev) => ({ ...prev, name: e }))
-                    }
-                  />
-                </View>
+              <SegmentedControl
+                values={["Objectifs", "Epargne/Caisse"]}
+                selectedIndex={selectedIndex}
+                onChange={(event) => {
+                  setSelectedIndex(event.nativeEvent.selectedSegmentIndex);
+                }}
+                fontStyle={{ fontFamily: FONT_FAMILY.regular, fontSize: 14 }}
+                activeFontStyle={{ fontFamily: FONT_FAMILY.bold, fontSize: 14 }}
+                style={{ height: 40 }}
+              />
+              {selectedIndex === 0 ? (
+                <View style={{ gap: 18 }}>
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Titre de l'objectif
+                    </ThemedText>
+                    <TextInput
+                      placeholder="Ex: Objectif fin d'année"
+                      placeholderTextColor={COLORS.gray}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        flex: 1,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      value={epargneData.name}
+                      onChangeText={(e) =>
+                        setEpargneData((prev) => ({ ...prev, name: e }))
+                      }
+                    />
+                  </View>
 
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant cible (${getSymbol()})`}</ThemedText>
-                  <TextInput
-                    placeholder="Ex: 200 000"
-                    placeholderTextColor={COLORS.gray}
-                    style={{
-                      padding: 16,
-                      borderWidth: 1,
-                      borderColor: COLORS.gray,
-                      color: color,
-                      borderRadius: 8,
-                      flex: 1,
-                      fontFamily: FONT_FAMILY.regular,
-                    }}
-                    keyboardType="numeric"
-                    value={epargneData.target_amount}
-                    onChangeText={(e) =>
-                      setEpargneData((prev) => ({ ...prev, target_amount: e }))
-                    }
-                  />
-                </View>
+                  <View style={{ gap: 8 }}>
+                    <ThemedText
+                      style={{ fontFamily: FONT_FAMILY.semibold }}
+                    >{`Montant cible (${getSymbol()})`}</ThemedText>
+                    <TextInput
+                      placeholder="Ex: 200 000"
+                      placeholderTextColor={COLORS.gray}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        flex: 1,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      keyboardType="numeric"
+                      value={epargneData.target_amount}
+                      onChangeText={(e) =>
+                        setEpargneData((prev) => ({
+                          ...prev,
+                          target_amount: e,
+                        }))
+                      }
+                    />
+                  </View>
 
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Apport initial (${getSymbol()})`}</ThemedText>
-                  <TextInput
-                    placeholder="Ex: 0"
-                    placeholderTextColor={COLORS.gray}
-                    style={{
-                      padding: 16,
-                      borderWidth: 1,
-                      borderColor: COLORS.gray,
-                      color: color,
-                      borderRadius: 8,
-                      flex: 1,
-                      fontFamily: FONT_FAMILY.regular,
-                    }}
-                    keyboardType="numeric"
-                    value={epargneData.current_amount}
-                    onChangeText={(e) =>
-                      setEpargneData((prev) => ({ ...prev, current_amount: e }))
-                    }
-                  />
-                </View>
+                  <View style={{ gap: 8 }}>
+                    <ThemedText
+                      style={{ fontFamily: FONT_FAMILY.semibold }}
+                    >{`Apport initial (${getSymbol()})`}</ThemedText>
+                    <TextInput
+                      placeholder="Ex: 0"
+                      placeholderTextColor={COLORS.gray}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        flex: 1,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      keyboardType="numeric"
+                      value={epargneData.current_amount}
+                      onChangeText={(e) =>
+                        setEpargneData((prev) => ({
+                          ...prev,
+                          current_amount: e,
+                        }))
+                      }
+                    />
+                  </View>
 
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    Date cible
-                  </ThemedText>
-                  <View
-                    style={{
-                      // flexDirection: "row",
-                      // alignItems: "center",
-                      width: "100%",
-                      gap: 8,
-                      // justifyContent: "space-between",
-                    }}
-                  >
-                    {open && (
-                      <DateTimePicker
-                        mode="date"
-                        display="spinner"
-                        value={
-                          epargneData.target_date
-                            ? parseLocalDate(epargneData.target_date)
-                            : new Date()
-                        }
-                        onChange={onChange}
-                        style={{
-                          height: 120,
-                          marginTop: 20,
-                          width: "100%",
-                        }}
-                        textColor={color}
-                      />
-                    )}
-
-                    {open && Platform.OS === "ios" && (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "space-around",
-                          marginBottom: 20,
-                        }}
-                      >
-                        <TouchableOpacity
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Date cible
+                    </ThemedText>
+                    <View
+                      style={{
+                        // flexDirection: "row",
+                        // alignItems: "center",
+                        width: "100%",
+                        gap: 8,
+                        // justifyContent: "space-between",
+                      }}
+                    >
+                      {open && (
+                        <DateTimePicker
+                          mode="date"
+                          display="spinner"
+                          value={
+                            epargneData.target_date
+                              ? parseLocalDate(epargneData.target_date)
+                              : new Date()
+                          }
+                          onChange={onChange}
                           style={{
-                            padding: 10,
-                            backgroundColor: "gray",
-                            borderRadius: 10,
-                          }}
-                          onPress={toggleDatePicker}
-                        >
-                          <Text style={{ color: "black", fontWeight: "bold" }}>
-                            Annuler
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={{
-                            padding: 10,
-                            backgroundColor: "gray",
-                            borderRadius: 10,
-                          }}
-                          onPress={confirmIOSDate}
-                        >
-                          <Text style={{ color: "black", fontWeight: "bold" }}>
-                            Valider
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {!open && (
-                      <TouchableOpacity onPress={toggleDatePicker}>
-                        <TextInput
-                          placeholder="Date cible"
-                          placeholderTextColor={COLORS.gray}
-                          style={{
-                            borderWidth: 1,
-                            borderColor: COLORS.gray,
-                            padding: 10,
-                            borderRadius: 10,
-                            color: color,
-                            fontFamily: FONT_FAMILY.regular,
-                            height: 52,
+                            height: 120,
+                            marginTop: 20,
                             width: "100%",
                           }}
-                          editable={false}
-                          value={epargneData.target_date}
-                          onChangeText={(e: any) =>
-                            setEpargneData({
-                              ...epargneData,
-                              target_date: e,
-                            })
-                          }
-                          onPressIn={toggleDatePicker}
+                          textColor={color}
                         />
-                      </TouchableOpacity>
-                    )}
+                      )}
+
+                      {open && Platform.OS === "ios" && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-around",
+                            marginBottom: 20,
+                          }}
+                        >
+                          <TouchableOpacity
+                            style={{
+                              padding: 10,
+                              backgroundColor: "gray",
+                              borderRadius: 10,
+                            }}
+                            onPress={toggleDatePicker}
+                          >
+                            <Text
+                              style={{ color: "black", fontWeight: "bold" }}
+                            >
+                              Annuler
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={{
+                              padding: 10,
+                              backgroundColor: "gray",
+                              borderRadius: 10,
+                            }}
+                            onPress={confirmIOSDate}
+                          >
+                            <Text
+                              style={{ color: "black", fontWeight: "bold" }}
+                            >
+                              Valider
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {!open && (
+                        <TouchableOpacity onPress={toggleDatePicker}>
+                          <TextInput
+                            placeholder="Date cible"
+                            placeholderTextColor={COLORS.gray}
+                            style={{
+                              borderWidth: 1,
+                              borderColor: COLORS.gray,
+                              padding: 10,
+                              borderRadius: 10,
+                              color: color,
+                              fontFamily: FONT_FAMILY.regular,
+                              height: 52,
+                              width: "100%",
+                            }}
+                            editable={false}
+                            value={epargneData.target_date}
+                            onChangeText={(e: any) =>
+                              setEpargneData({
+                                ...epargneData,
+                                target_date: e,
+                              })
+                            }
+                            onPressIn={toggleDatePicker}
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
-                </View>
 
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    Date de début
-                  </ThemedText>
-                  <View
-                    style={{
-                      // flexDirection: "row",
-                      // alignItems: "center",
-                      width: "100%",
-                      gap: 8,
-                      // justifyContent: "space-between",
-                    }}
-                  >
-                    {open2 && (
-                      <DateTimePicker
-                        mode="date"
-                        display="spinner"
-                        value={
-                          epargneData.start_date
-                            ? parseLocalDate(epargneData.start_date)
-                            : new Date()
-                        }
-                        onChange={onChange2}
-                        style={{
-                          height: 120,
-                          marginTop: 20,
-                          width: "100%",
-                        }}
-                        textColor={color}
-                      />
-                    )}
-
-                    {open2 && Platform.OS === "ios" && (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "space-around",
-                          marginBottom: 20,
-                        }}
-                      >
-                        <TouchableOpacity
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Date de début
+                    </ThemedText>
+                    <View
+                      style={{
+                        // flexDirection: "row",
+                        // alignItems: "center",
+                        width: "100%",
+                        gap: 8,
+                        // justifyContent: "space-between",
+                      }}
+                    >
+                      {open2 && (
+                        <DateTimePicker
+                          mode="date"
+                          display="spinner"
+                          value={
+                            epargneData.start_date
+                              ? parseLocalDate(epargneData.start_date)
+                              : new Date()
+                          }
+                          onChange={onChange2}
                           style={{
-                            padding: 10,
-                            backgroundColor: "gray",
-                            borderRadius: 10,
-                          }}
-                          onPress={toggleDatePicker2}
-                        >
-                          <Text style={{ color: "black", fontWeight: "bold" }}>
-                            Annuler
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={{
-                            padding: 10,
-                            backgroundColor: "gray",
-                            borderRadius: 10,
-                          }}
-                          onPress={confirmIOSDate2}
-                        >
-                          <Text style={{ color: "black", fontWeight: "bold" }}>
-                            Valider
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {!open2 && (
-                      <TouchableOpacity onPress={toggleDatePicker2}>
-                        <TextInput
-                          placeholder="Date de début"
-                          placeholderTextColor={COLORS.gray}
-                          style={{
-                            borderWidth: 1,
-                            borderColor: COLORS.gray,
-                            padding: 10,
-                            borderRadius: 10,
-                            color: color,
-                            fontFamily: FONT_FAMILY.regular,
-                            height: 52,
+                            height: 120,
+                            marginTop: 20,
                             width: "100%",
                           }}
-                          editable={false}
-                          value={epargneData.start_date}
-                          onChangeText={(e: any) =>
+                          textColor={color}
+                        />
+                      )}
+
+                      {open2 && Platform.OS === "ios" && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-around",
+                            marginBottom: 20,
+                          }}
+                        >
+                          <TouchableOpacity
+                            style={{
+                              padding: 10,
+                              backgroundColor: "gray",
+                              borderRadius: 10,
+                            }}
+                            onPress={toggleDatePicker2}
+                          >
+                            <Text
+                              style={{ color: "black", fontWeight: "bold" }}
+                            >
+                              Annuler
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={{
+                              padding: 10,
+                              backgroundColor: "gray",
+                              borderRadius: 10,
+                            }}
+                            onPress={confirmIOSDate2}
+                          >
+                            <Text
+                              style={{ color: "black", fontWeight: "bold" }}
+                            >
+                              Valider
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {!open2 && (
+                        <TouchableOpacity onPress={toggleDatePicker2}>
+                          <TextInput
+                            placeholder="Date de début"
+                            placeholderTextColor={COLORS.gray}
+                            style={{
+                              borderWidth: 1,
+                              borderColor: COLORS.gray,
+                              padding: 10,
+                              borderRadius: 10,
+                              color: color,
+                              fontFamily: FONT_FAMILY.regular,
+                              height: 52,
+                              width: "100%",
+                            }}
+                            editable={false}
+                            value={epargneData.start_date}
+                            onChangeText={(e: any) =>
+                              setEpargneData({
+                                ...epargneData,
+                                start_date: e,
+                              })
+                            }
+                            onPressIn={toggleDatePicker2}
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Priorité
+                    </ThemedText>
+
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      {OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={option.key}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                            borderRadius: 12,
+                            borderWidth:
+                              option.key === epargneData.priority ? 2 : 1,
+                            borderColor:
+                              option.key === epargneData.priority
+                                ? COLORS.green
+                                : COLORS.gray,
+                            padding: 10,
+                            width: "30%",
+                            justifyContent: "center",
+                            backgroundColor:
+                              option.key === epargneData.priority
+                                ? COLORS.green + "20"
+                                : "transparent",
+                          }}
+                          onPress={() =>
                             setEpargneData({
                               ...epargneData,
-                              start_date: e,
+                              priority: option.key,
                             })
                           }
-                          onPressIn={toggleDatePicker2}
-                        />
-                      </TouchableOpacity>
-                    )}
+                        >
+                          <Text
+                            style={{
+                              color:
+                                option.key === epargneData.priority
+                                  ? COLORS.green
+                                  : color,
+                              fontFamily:
+                                option.key === epargneData.priority
+                                  ? FONT_FAMILY.semibold
+                                  : FONT_FAMILY.regular,
+                            }}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
-                </View>
-
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                    Priorité
-                  </ThemedText>
 
                   <View
                     style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
+                      padding: 12,
+                      borderWidth: 1,
+                      borderColor: COLORS.green,
+                      borderRadius: 12,
+                      backgroundColor: COLORS.green + "20",
+                      gap: 12,
                     }}
                   >
-                    {OPTIONS.map((option) => (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 12,
+                      }}
+                    >
+                      <FontAwesome6
+                        name="chart-line"
+                        size={24}
+                        color={COLORS.green}
+                      />
+                      <View>
+                        <ThemedText
+                          style={{ fontFamily: FONT_FAMILY.semibold }}
+                        >
+                          Epargne périodique mini.
+                        </ThemedText>
+                        <Text
+                          style={{
+                            color: COLORS.gray,
+                            fontFamily: FONT_FAMILY.medium,
+                            fontSize: 12,
+                          }}
+                        >
+                          Montant conseillé pour atteindre votre objectif.
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ gap: 12 }}>
                       <TouchableOpacity
-                        key={option.key}
                         style={{
+                          padding: 12,
+                          borderWidth: 1,
+                          borderColor:
+                            epargneData.frequence === "dayly"
+                              ? "#14b814"
+                              : COLORS.gray,
+                          borderRadius: 16,
+                          flex: 1,
                           flexDirection: "row",
                           alignItems: "center",
                           gap: 8,
-                          borderRadius: 12,
-                          borderWidth:
-                            option.key === epargneData.priority ? 2 : 1,
-                          borderColor:
-                            option.key === epargneData.priority
-                              ? COLORS.green
-                              : COLORS.gray,
-                          padding: 10,
-                          width: "30%",
-                          justifyContent: "center",
-                          backgroundColor:
-                            option.key === epargneData.priority
-                              ? COLORS.green + "20"
-                              : "transparent",
                         }}
                         onPress={() =>
                           setEpargneData({
                             ...epargneData,
-                            priority: option.key,
+                            frequence: "dayly",
+                            min_weekly: periodeDAtats.min_dayly.toString(),
                           })
                         }
                       >
+                        <View
+                          style={{
+                            borderWidth: 1,
+                            borderColor: COLORS.gray,
+                            width: 15,
+                            height: 15,
+                            padding: 10,
+                            borderRadius: 100,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius:
+                                epargneData.frequence === "dayly" ? 5 : 0,
+                              backgroundColor:
+                                epargneData.frequence === "dayly"
+                                  ? COLORS.green
+                                  : "transparent",
+                            }}
+                          />
+                        </View>
                         <Text
                           style={{
                             color:
-                              option.key === epargneData.priority
-                                ? COLORS.green
-                                : color,
-                            fontFamily:
-                              option.key === epargneData.priority
-                                ? FONT_FAMILY.semibold
-                                : FONT_FAMILY.regular,
-                          }}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View
-                  style={{
-                    padding: 12,
-                    borderWidth: 1,
-                    borderColor: COLORS.green,
-                    borderRadius: 12,
-                    backgroundColor: COLORS.green + "20",
-                    gap: 12,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 12,
-                    }}
-                  >
-                    <FontAwesome6
-                      name="chart-line"
-                      size={24}
-                      color={COLORS.green}
-                    />
-                    <View>
-                      <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                        Epargne périodique mini.
-                      </ThemedText>
-                      <Text
-                        style={{
-                          color: COLORS.gray,
-                          fontFamily: FONT_FAMILY.medium,
-                          fontSize: 12,
-                        }}
-                      >
-                        Montant conseillé pour atteindre votre objectif.
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={{ gap: 12 }}>
-                    <TouchableOpacity
-                      style={{
-                        padding: 12,
-                        borderWidth: 1,
-                        borderColor:
-                          epargneData.frequence === "dayly"
-                            ? "#14b814"
-                            : COLORS.gray,
-                        borderRadius: 16,
-                        flex: 1,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                      onPress={() =>
-                        setEpargneData({
-                          ...epargneData,
-                          frequence: "dayly",
-                          min_weekly: periodeDAtats.min_dayly.toString(),
-                        })
-                      }
-                    >
-                      <View
-                        style={{
-                          borderWidth: 1,
-                          borderColor: COLORS.gray,
-                          width: 15,
-                          height: 15,
-                          padding: 10,
-                          borderRadius: 100,
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <View
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius:
-                              epargneData.frequence === "dayly" ? 5 : 0,
-                            backgroundColor:
                               epargneData.frequence === "dayly"
                                 ? COLORS.green
-                                : "transparent",
+                                : color,
+                            fontFamily: FONT_FAMILY.medium,
                           }}
-                        />
-                      </View>
-                      <Text
-                        style={{
-                          color:
-                            epargneData.frequence === "dayly"
-                              ? COLORS.green
-                              : color,
-                          fontFamily: FONT_FAMILY.medium,
-                        }}
-                      >
-                        Epargne journalière :{" "}
-                        {formatInCurrency(periodeDAtats.min_dayly)}
-                      </Text>
-                    </TouchableOpacity>
+                        >
+                          Epargne journalière :{" "}
+                          {formatInCurrency(periodeDAtats.min_dayly)}
+                        </Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={{
-                        padding: 12,
-                        borderWidth: 1,
-                        borderColor:
-                          epargneData.frequence === "weekly"
-                            ? "#14b814"
-                            : COLORS.gray,
-                        borderRadius: 16,
-                        flex: 1,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                      onPress={() =>
-                        setEpargneData({
-                          ...epargneData,
-                          frequence: "weekly",
-                          min_weekly: periodeDAtats.min_weekly.toString(),
-                        })
-                      }
-                    >
-                      <View
+                      <TouchableOpacity
                         style={{
+                          padding: 12,
                           borderWidth: 1,
-                          borderColor: COLORS.gray,
-                          width: 15,
-                          height: 15,
-                          padding: 10,
-                          borderRadius: 100,
+                          borderColor:
+                            epargneData.frequence === "weekly"
+                              ? "#14b814"
+                              : COLORS.gray,
+                          borderRadius: 16,
+                          flex: 1,
+                          flexDirection: "row",
                           alignItems: "center",
-                          justifyContent: "center",
+                          gap: 8,
                         }}
+                        onPress={() =>
+                          setEpargneData({
+                            ...epargneData,
+                            frequence: "weekly",
+                            min_weekly: periodeDAtats.min_weekly.toString(),
+                          })
+                        }
                       >
                         <View
                           style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius:
-                              epargneData.frequence === "weekly" ? 5 : 0,
-                            backgroundColor:
+                            borderWidth: 1,
+                            borderColor: COLORS.gray,
+                            width: 15,
+                            height: 15,
+                            padding: 10,
+                            borderRadius: 100,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius:
+                                epargneData.frequence === "weekly" ? 5 : 0,
+                              backgroundColor:
+                                epargneData.frequence === "weekly"
+                                  ? COLORS.green
+                                  : "transparent",
+                            }}
+                          />
+                        </View>
+                        <Text
+                          style={{
+                            color:
                               epargneData.frequence === "weekly"
                                 ? COLORS.green
-                                : "transparent",
+                                : color,
+                            fontFamily: FONT_FAMILY.medium,
                           }}
-                        />
-                      </View>
-                      <Text
-                        style={{
-                          color:
-                            epargneData.frequence === "weekly"
-                              ? COLORS.green
-                              : color,
-                          fontFamily: FONT_FAMILY.medium,
-                        }}
-                      >
-                        Epargne hebdomadaire :{" "}
-                        {formatInCurrency(periodeDAtats.min_weekly)}
-                      </Text>
-                    </TouchableOpacity>
+                        >
+                          Epargne hebdomadaire :{" "}
+                          {formatInCurrency(periodeDAtats.min_weekly)}
+                        </Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={{
-                        padding: 12,
-                        borderWidth: 1,
-                        borderColor:
-                          epargneData.frequence === "monthly"
-                            ? "#14b814"
-                            : COLORS.gray,
-                        borderRadius: 16,
-                        flex: 1,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                      onPress={() =>
-                        setEpargneData({
-                          ...epargneData,
-                          frequence: "monthly",
-                          min_weekly: periodeDAtats.min_monthly.toString(),
-                        })
-                      }
-                    >
-                      <View
+                      <TouchableOpacity
                         style={{
+                          padding: 12,
                           borderWidth: 1,
-                          borderColor: COLORS.gray,
-                          width: 15,
-                          height: 15,
-                          padding: 10,
-                          borderRadius: 100,
+                          borderColor:
+                            epargneData.frequence === "monthly"
+                              ? "#14b814"
+                              : COLORS.gray,
+                          borderRadius: 16,
+                          flex: 1,
+                          flexDirection: "row",
                           alignItems: "center",
-                          justifyContent: "center",
+                          gap: 8,
                         }}
+                        onPress={() =>
+                          setEpargneData({
+                            ...epargneData,
+                            frequence: "monthly",
+                            min_weekly: periodeDAtats.min_monthly.toString(),
+                          })
+                        }
                       >
                         <View
                           style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius:
-                              epargneData.frequence === "monthly" ? 5 : 0,
-                            backgroundColor:
+                            borderWidth: 1,
+                            borderColor: COLORS.gray,
+                            width: 15,
+                            height: 15,
+                            padding: 10,
+                            borderRadius: 100,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius:
+                                epargneData.frequence === "monthly" ? 5 : 0,
+                              backgroundColor:
+                                epargneData.frequence === "monthly"
+                                  ? COLORS.green
+                                  : "transparent",
+                            }}
+                          />
+                        </View>
+                        <Text
+                          style={{
+                            color:
                               epargneData.frequence === "monthly"
                                 ? COLORS.green
-                                : "transparent",
+                                : color,
+                            fontFamily: FONT_FAMILY.medium,
                           }}
-                        />
-                      </View>
-                      <Text
-                        style={{
-                          color:
-                            epargneData.frequence === "monthly"
-                              ? COLORS.green
-                              : color,
-                          fontFamily: FONT_FAMILY.medium,
-                        }}
-                      >
-                        Epargne mensuelle :{" "}
-                        {formatInCurrency(periodeDAtats.min_monthly)}
-                      </Text>
-                    </TouchableOpacity>
+                        >
+                          Epargne mensuelle :{" "}
+                          {formatInCurrency(periodeDAtats.min_monthly)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
+              ) : (
+                <View style={{ gap: 18 }}>
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Titre de l'épargne
+                    </ThemedText>
+                    <TextInput
+                      placeholder="Ex: Epargne"
+                      placeholderTextColor={COLORS.gray}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        flex: 1,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
+                      value={caisseData.nom}
+                      onChangeText={(e) =>
+                        setCaisseData((prev) => ({ ...prev, nom: e }))
+                      }
+                    />
+                  </View>
+                </View>
+              )}
 
               <TouchableOpacity
                 style={{
@@ -1678,7 +1797,9 @@ export default function TabFourScreen() {
                     justifyContent: "center",
                   }}
                 >
-                  <ThemedText style={{ fontFamily: FONT_FAMILY.regular }}>{`Montant (${getSymbol()})`}</ThemedText>
+                  <ThemedText
+                    style={{ fontFamily: FONT_FAMILY.regular }}
+                  >{`Montant (${getSymbol()})`}</ThemedText>
                   <TextInput
                     placeholder="0"
                     keyboardType="numeric"

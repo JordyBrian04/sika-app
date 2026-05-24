@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -385,4 +385,17 @@ ON goal_contributions(goal_id, date);`,
     // à son typage dynamique. Aucune migration SQL n'est nécessaire.
     `SELECT 1; -- migration 6 : montants décimaux activés (parseFloat côté app)`,
   ],
+
+  8: [
+        // --- epargne
+    `CREATE TABLE IF NOT EXISTS epargne (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        nom varchar(255) NOT NULL,
+        dates date NOT NULL,
+        montant INTEGER NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_epargne_active ON epargne(active);`,
+  ]
 };
