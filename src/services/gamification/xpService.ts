@@ -171,7 +171,7 @@ export async function reward(action: XpAction, refId?: number) {
 
   try {
     await runSql(
-      `INSERT INTO xp_events (action, ref_id, xp)
+      `INSERT OR IGNORE INTO xp_events (action, ref_id, xp)
        VALUES (?, ?, ?)`,
       [action, refId ?? null, amount],
     );

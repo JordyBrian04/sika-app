@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 8;
+export const DB_VERSION = 10;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -389,7 +389,7 @@ ON goal_contributions(goal_id, date);`,
   8: [
         // --- epargne
     `CREATE TABLE IF NOT EXISTS epargne (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom varchar(255) NOT NULL,
         dates date NOT NULL,
         montant INTEGER NOT NULL,
@@ -397,5 +397,15 @@ ON goal_contributions(goal_id, date);`,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );`,
     `CREATE INDEX IF NOT EXISTS idx_epargne_active ON epargne(active);`,
-  ]
+  ],
+
+  9: [
+    // --- goal_type : 'objective' | 'periodic' | 'jar'
+    `ALTER TABLE saving_goals ADD COLUMN goal_type TEXT NOT NULL DEFAULT 'objective';`,
+  ],
+
+  10: [
+    // Corriger les tirelires existantes (target_date='9999-12-31' = sentinel jar)
+    `UPDATE saving_goals SET goal_type = 'jar' WHERE target_date = '9999-12-31';`,
+  ],
 };

@@ -4,6 +4,8 @@ import { toYYYYMMDD } from "@/src/utils/goalDates";
 import { reward } from "../gamification/xpService";
 import { deleteGoalContribution } from "./contributions";
 
+export type GoalType = "objective" | "periodic" | "jar";
+
 export type Goal = {
   id: number;
   name: string;
@@ -14,21 +16,23 @@ export type Goal = {
   min_weekly: number;
   active: 0 | 1;
   frequence?: "daily" | "weekly" | "monthly"; // pour calcul auto des contributions
+  goal_type: GoalType;
 };
 
 export async function createGoal(input: {
   name: string;
   target_amount: number;
-  target_date: string; // YYYY-MM-DD
+  target_date: string; // YYYY-MM-DD (use '9999-12-31' for jar type)
   priority?: Goal["priority"];
   min_weekly?: number;
   start_date?: string;
   frequence?: Goal["frequence"];
+  goal_type?: GoalType;
 }) {
   const start = input.start_date ?? toYYYYMMDD(new Date());
   await runSql(
-    `INSERT INTO saving_goals (name, target_amount, start_date, target_date, priority, min_weekly, frequence)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO saving_goals (name, target_amount, start_date, target_date, priority, min_weekly, frequence, goal_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.name.trim(),
       input.target_amount,
@@ -37,6 +41,7 @@ export async function createGoal(input: {
       input.priority ?? "medium",
       input.min_weekly ?? 0,
       input.frequence ?? "weekly",
+      input.goal_type ?? "objective",
     ],
   );
 

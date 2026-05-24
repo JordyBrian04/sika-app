@@ -17,6 +17,7 @@ import {
     createGoal,
     getMinWeekly,
     listGoals,
+    updateGoal,
 } from "@/src/services/goals/goalsRepo";
 import { getGoalPlan } from "@/src/services/goals/planner";
 import { autoCheckNoSpendDay } from "@/src/services/missions/noSpendDay";
@@ -79,15 +80,20 @@ export default function TabFourScreen() {
   const [open, setOpen] = useState(false);
   const [open2, setOpen2] = useState(false);
   const [open3, setOpen3] = useState(false);
+  const [open4, setOpen4] = useState(false);
   const [date, setDate] = useState(new Date());
   const [date2, setDate2] = useState(new Date());
   const [date3, setDate3] = useState(new Date());
+  const [date4, setDate4] = useState(new Date());
+  // 0=Objectif  1=Périodique  2=Tirelire
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const OPTIONS = [
     { key: "low", label: "Basse" },
     { key: "medium", label: "Moyenne" },
     { key: "high", label: "Haute" },
   ];
+
+  // --- Formulaire type Objectif (existant) ---
   const [epargneData, setEpargneData] = useState({
     name: "",
     target_amount: "0",
@@ -104,6 +110,21 @@ export default function TabFourScreen() {
     min_weekly: 0,
     min_monthly: 0,
   });
+
+  // --- Formulaire type Périodique (nouveau) ---
+  const [periodicData, setPeriodicData] = useState({
+    name: "",
+    amount_per_period: "0",
+    target_date: "",
+    frequence: "weekly" as "daily" | "weekly" | "monthly",
+  });
+  const [periodicProjection, setPeriodicProjection] = useState(0);
+
+  // --- Formulaire type Tirelire (nouveau) ---
+  const [jarData, setJarData] = useState({
+    name: "",
+    initial_amount: "0",
+  });
   const [inputShown, setInputShown] = useState<"add_goal" | "add_contribution">(
     "add_goal",
   );
@@ -112,11 +133,6 @@ export default function TabFourScreen() {
     date: new Date().toISOString().substring(0, 10),
   });
   const [amount, setAmount] = useState<number[]>([]);
-  const [caisseData, setCaisseData] = useState({
-    nom: "",
-    dates: "",
-    montant: "",
-  });
 
   const toggleDatePicker = () => {
     setOpen(!open);
@@ -128,6 +144,10 @@ export default function TabFourScreen() {
 
   const toggleDatePicker3 = () => {
     setOpen3(!open3);
+  };
+
+  const toggleDatePicker4 = () => {
+    setOpen4(!open4);
   };
 
   // Formate un montant déjà en devise courante (sans re-conversion FCFA)
@@ -219,6 +239,23 @@ export default function TabFourScreen() {
     }
   };
 
+  const onChange4 = ({ type }: any, selectedDate: any) => {
+    if (!selectedDate) return;
+    const currentDate = selectedDate;
+    setDate4(currentDate);
+    if (type === "set") {
+      if (Platform.OS === "android") {
+        setOpen4(false);
+        setPeriodicData((prev) => ({
+          ...prev,
+          target_date: toLocalISODate(currentDate),
+        }));
+      }
+    } else {
+      setOpen4(false);
+    }
+  };
+
   const confirmIOSDate = () => {
     setEpargneData((prev) => ({ ...prev, target_date: toLocalISODate(date) }));
     setOpen(false);
@@ -232,6 +269,11 @@ export default function TabFourScreen() {
   const confirmIOSDate3 = () => {
     setContribution((prev) => ({ ...prev, date: toLocalISODate(date3) }));
     setOpen3(false);
+  };
+
+  const confirmIOSDate4 = () => {
+    setPeriodicData((prev) => ({ ...prev, target_date: toLocalISODate(date4) }));
+    setOpen4(false);
   };
 
   const calculatePercentage = (current: number, total: number) => {
@@ -263,32 +305,29 @@ export default function TabFourScreen() {
     setWeeklyMissions(pack.mission);
     setWeeklyBoosts(pack.boosts);
 
-    const allGoals = await listGoals();
+    // Tous les goals pour le total (actifs + clôturés)
+    const allGoalsForTotal = await listGoals(false);
     let dejaEpargne = 0;
+    for (const g of allGoalsForTotal) {
+      const details = await getGoalPlan(g.id);
+      dejaEpargne += details.saved_amount;
+    }
+    setTotalEpargne(dejaEpargne);
 
+    // Seulement les goals actifs pour l'affichage
+    const activeGoals = allGoalsForTotal.filter((g) => g.active === 1);
     const result = await Promise.all(
-      allGoals.map(async (g) => {
+      activeGoals.map(async (g) => {
         const details = await getGoalPlan(g.id);
-
-        dejaEpargne += details.saved_amount;
-
-        console.log(
-          "details",
-          details.saved_amount,
-          g.target_amount,
-          dejaEpargne,
-        );
-
         return {
           ...g,
           details,
-          percentage: animate(details.saved_amount, g.target_amount),
+          percentage:
+            g.goal_type === "jar" ? 0 : animate(details.saved_amount, g.target_amount),
         };
       }),
     );
 
-    console.log("GOALS ", result);
-    setTotalEpargne(dejaEpargne);
     setGoals(result);
     setLoading(false);
   };
@@ -376,19 +415,25 @@ export default function TabFourScreen() {
     });
   }, [amount]);
 
-  const handleSave = async () => {
-    if (
-      !epargneData.name ||
-      parseFloat(epargneData.target_amount) <= 0 ||
-      !epargneData.target_date ||
-      !epargneData.start_date ||
-      parseFloat(epargneData.min_weekly) <= 0
-    ) {
-      // Handle the case where some fields are missing
-      alert("Veuillez remplir tous les champs correctement.");
+  // Calcul projection type Périodique
+  useEffect(() => {
+    const { target_date, amount_per_period, frequence } = periodicData;
+    if (!target_date || !amount_per_period || parseFloat(amount_per_period) <= 0) {
+      setPeriodicProjection(0);
       return;
     }
+    const today = new Date();
+    const end = new Date(target_date);
+    if (end <= today) { setPeriodicProjection(0); return; }
+    const totalDays = Math.max(diffDays(end, today), 0);
+    let periods = 1;
+    if (frequence === "daily") periods = Math.max(totalDays, 1);
+    else if (frequence === "weekly") periods = Math.max(Math.ceil(totalDays / 7), 1);
+    else periods = Math.max(Math.ceil(totalDays / 30), 1);
+    setPeriodicProjection(Math.ceil(parseFloat(amount_per_period) * periods));
+  }, [periodicData.target_date, periodicData.amount_per_period, periodicData.frequence]);
 
+  const handleSave = async () => {
     setLoading2(true);
     try {
       // Limite gratuit : 2 objectifs actifs maximum
@@ -404,62 +449,135 @@ export default function TabFourScreen() {
         }
       }
 
-      // Conversion vers FCFA (stockage interne)
-      const targetFCFA = await toFCFA(
-        parseFloat(epargneData.target_amount) || 0,
-      );
-      const currentFCFA = await toFCFA(
-        parseFloat(epargneData.current_amount) || 0,
-      );
-      const minWeeklyFCFA = await toFCFA(
-        parseFloat(epargneData.min_weekly) || 0,
-      );
-
-      const goalId = await createGoal({
-        name: epargneData.name,
-        target_amount: targetFCFA,
-        target_date: epargneData.target_date,
-        start_date: epargneData.start_date,
-        priority: epargneData.priority as any,
-        min_weekly: minWeeklyFCFA,
-        frequence: epargneData.frequence as any,
-      });
-
-      if (currentFCFA > 0) {
-        await addContribution({
-          goal_id: goalId,
-          amount: currentFCFA,
-          date: new Date().toISOString().substring(0, 10),
-          source: "auto",
+      // ---- TYPE OBJECTIF (existant) ----
+      if (selectedIndex === 0) {
+        if (
+          !epargneData.name ||
+          parseFloat(epargneData.target_amount) <= 0 ||
+          !epargneData.target_date ||
+          !epargneData.start_date ||
+          parseFloat(epargneData.min_weekly) <= 0
+        ) {
+          setLoading2(false);
+          alert("Veuillez remplir tous les champs correctement.");
+          return;
+        }
+        const targetFCFA = await toFCFA(parseFloat(epargneData.target_amount) || 0);
+        const currentFCFA = await toFCFA(parseFloat(epargneData.current_amount) || 0);
+        const minWeeklyFCFA = await toFCFA(parseFloat(epargneData.min_weekly) || 0);
+        const goalId = await createGoal({
+          name: epargneData.name,
+          target_amount: targetFCFA,
+          target_date: epargneData.target_date,
+          start_date: epargneData.start_date,
+          priority: epargneData.priority as any,
+          min_weekly: minWeeklyFCFA,
+          frequence: epargneData.frequence as any,
+          goal_type: "objective",
         });
+        if (currentFCFA > 0) {
+          await addContribution({
+            goal_id: goalId,
+            amount: currentFCFA,
+            date: new Date().toISOString().substring(0, 10),
+            source: "auto",
+          });
+        }
+        setEpargneData({
+          name: "",
+          target_amount: "0",
+          current_amount: "0",
+          target_date: "",
+          start_date: new Date().toISOString().substring(0, 10),
+          min_weekly: "0",
+          priority: "medium",
+          active: true,
+          frequence: "weekly",
+        });
+        setPeriodeDAtats({ min_dayly: 0, min_weekly: 0, min_monthly: 0 });
+
+      // ---- TYPE PÉRIODIQUE (nouveau) ----
+      } else if (selectedIndex === 1) {
+        if (
+          !periodicData.name ||
+          parseFloat(periodicData.amount_per_period) <= 0 ||
+          !periodicData.target_date ||
+          periodicProjection <= 0
+        ) {
+          setLoading2(false);
+          alert("Veuillez remplir tous les champs correctement.");
+          return;
+        }
+        const amountFCFA = await toFCFA(parseFloat(periodicData.amount_per_period));
+        const projFCFA = await toFCFA(periodicProjection);
+        await createGoal({
+          name: periodicData.name,
+          target_amount: projFCFA,           // montant projeté = target
+          min_weekly: amountFCFA,             // montant par période
+          target_date: periodicData.target_date,
+          start_date: new Date().toISOString().substring(0, 10),
+          frequence: periodicData.frequence,
+          priority: "medium",
+          goal_type: "periodic",
+        });
+        setPeriodicData({ name: "", amount_per_period: "0", target_date: "", frequence: "weekly" });
+        setPeriodicProjection(0);
+
+      // ---- TYPE TIRELIRE (nouveau) ----
+      } else {
+        if (!jarData.name) {
+          setLoading2(false);
+          alert("Veuillez entrer un nom pour la tirelire.");
+          return;
+        }
+        const initialFCFA = await toFCFA(parseFloat(jarData.initial_amount) || 0);
+        const goalId = await createGoal({
+          name: jarData.name,
+          target_amount: 0,
+          target_date: "9999-12-31",
+          start_date: new Date().toISOString().substring(0, 10),
+          min_weekly: 0,
+          frequence: "monthly",
+          priority: "medium",
+          goal_type: "jar",
+        });
+        if (initialFCFA > 0) {
+          await addContribution({
+            goal_id: goalId,
+            amount: initialFCFA,
+            date: new Date().toISOString().substring(0, 10),
+            source: "auto",
+          });
+        }
+        setJarData({ name: "", initial_amount: "0" });
       }
 
       toggleSheet();
-      setEpargneData({
-        name: "",
-        target_amount: "0",
-        current_amount: "0",
-        target_date: "",
-        start_date: new Date().toISOString().substring(0, 10),
-        min_weekly: "0",
-        priority: "medium",
-        active: true,
-        frequence: "weekly",
-      });
-      setPeriodeDAtats({
-        min_dayly: 0,
-        min_weekly: 0,
-        min_monthly: 0,
-      });
       getDatas();
     } catch (error) {
-      alert(
-        "Une erreur est survenue lors de la création de l'épargne. Veuillez réessayer.",
-      );
+      alert("Une erreur est survenue lors de la création de l'épargne. Veuillez réessayer.");
       console.error("Error creating goal:", error);
     } finally {
       setLoading2(false);
     }
+  };
+
+  const handleCloseGoal = (item: any) => {
+    Alert.alert(
+      "Clôturer l'épargne",
+      `Clôturer "${item.name}" ? Elle sera désactivée et n'apparaîtra plus dans la liste.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Clôturer",
+          style: "destructive",
+          onPress: async () => {
+            await updateGoal(item.id, { active: 0 });
+            getDatas();
+          },
+        },
+      ],
+    );
   };
 
   const handleSaveContribution = async () => {
@@ -824,123 +942,113 @@ export default function TabFourScreen() {
                         })
                       }
                     >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 12,
-                        }}
-                      >
-                        <View style={{}}>
+                          {/* --- En-tête carte --- */}
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        {/* Progressbar seulement pour objective et periodic */}
+                        {item.goal_type !== "jar" ? (
                           <CircularProgressBar
                             radius={R}
                             strokeWidth={STROKE_WIDTH}
                             percentage={item.percentage}
                             end={item.percentage / 100}
                           />
-                        </View>
+                        ) : (
+                          <View style={{ width: R * 2, height: R * 2, borderRadius: R, borderWidth: STROKE_WIDTH, borderColor: COLORS.primary + "50", alignItems: "center", justifyContent: "center" }}>
+                            <MaterialIcons name="savings" size={32} color={COLORS.primary} />
+                          </View>
+                        )}
 
                         <View style={{ flex: 1, gap: 4 }}>
-                          <ThemedText
-                            style={{
-                              fontFamily: FONT_FAMILY.bold,
-                              fontSize: 18,
-                            }}
-                          >
+                          <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 18 }}>
                             {item.name}
                           </ThemedText>
-                          <Text
-                            style={{
-                              fontFamily: FONT_FAMILY.medium,
-                              color: COLORS.gray,
-                              fontSize: 12,
-                            }}
-                          >
-                            Reste {displayAmount(item.details.remaining_amount)}{" "}
-                            sur {displayAmount(item.target_amount)}
-                          </Text>
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 4,
-                            }}
-                          >
-                            <Fontisto
-                              name="wallet"
-                              size={14}
-                              color={COLORS.gray}
-                            />
-                            <Text
-                              style={{
-                                fontFamily: FONT_FAMILY.medium,
-                                color: COLORS.gray,
-                                fontSize: 12,
-                              }}
-                            >
-                              Echeance :{" "}
-                              {new Date(item.target_date).toLocaleDateString(
-                                "fr-FR",
-                                { month: "long", year: "numeric" },
-                              )}
+
+                          {item.goal_type === "jar" ? (
+                            <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray, fontSize: 12 }}>
+                              Épargné : {displayAmount(item.details.saved_amount)}
                             </Text>
+                          ) : (
+                            <>
+                              <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray, fontSize: 12 }}>
+                                Reste {displayAmount(item.details.remaining_amount)} sur {displayAmount(item.target_amount)}
+                              </Text>
+                              {item.goal_type !== "jar" && item.target_date !== "9999-12-31" && (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                  <Fontisto name="wallet" size={14} color={COLORS.gray} />
+                                  <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray, fontSize: 12 }}>
+                                    Échéance :{" "}
+                                    {new Date(item.target_date).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+                                  </Text>
+                                </View>
+                              )}
+                            </>
+                          )}
+
+                          {/* Badge type */}
+                          <View style={{ flexDirection: "row", gap: 4, flexWrap: "wrap" }}>
+                            <View style={{ backgroundColor: item.goal_type === "objective" ? COLORS.primary + "20" : item.goal_type === "periodic" ? "#f59e0b20" : COLORS.green + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                              <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 11, color: item.goal_type === "objective" ? COLORS.primary : item.goal_type === "periodic" ? "#f59e0b" : COLORS.green }}>
+                                {item.goal_type === "objective" ? "Objectif" : item.goal_type === "periodic" ? "Périodique" : "Tirelire"}
+                              </Text>
+                            </View>
                           </View>
                         </View>
                       </View>
 
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: 12,
-                          backgroundColor: COLORS.green,
-                          borderRadius: 8,
-                          justifyContent: "center",
-                        }}
-                        onPress={() =>
-                          Alert.alert(
-                            "Epargner",
-                            "Epargner le montant défini ou un autre montant ?",
-                            [
-                              {
-                                text: "Montant défini",
-                                onPress: async () => {
-                                  await addContribution({
-                                    goal_id: item.id,
-                                    amount: item.min_weekly,
-                                    date: new Date()
-                                      .toISOString()
-                                      .substring(0, 10),
-                                    source: "manual",
-                                  });
-                                  getDatas();
-                                },
-                              },
-                              {
-                                text: "Autre montant",
-                                onPress: () => {
-                                  setSelectedGoals(item);
-                                  setInputShown("add_contribution");
-                                  toggleSheet();
-                                },
-                              },
-                            ],
-                          )
-                        }
-                      >
-                        <MaterialIcons name="savings" size={24} color="white" />
-                        <Text
-                          style={{
-                            color: "white",
-                            fontFamily: FONT_FAMILY.semibold,
-                            fontSize: 16,
+                      {/* --- Boutons action --- */}
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        {/* Bouton Épargner */}
+                        <TouchableOpacity
+                          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, padding: 12, backgroundColor: COLORS.green, borderRadius: 8, justifyContent: "center" }}
+                          onPress={() => {
+                            if (item.goal_type === "jar") {
+                              // Tirelire : saisie libre directe
+                              setSelectedGoals(item);
+                              setInputShown("add_contribution");
+                              toggleSheet();
+                            } else {
+                              // Objectif ou Périodique : montant défini ou autre
+                              Alert.alert(
+                                "Épargner",
+                                "Épargner le montant défini ou un autre montant ?",
+                                [
+                                  {
+                                    text: "Montant défini",
+                                    onPress: async () => {
+                                      await addContribution({
+                                        goal_id: item.id,
+                                        amount: item.min_weekly,
+                                        date: new Date().toISOString().substring(0, 10),
+                                        source: "manual",
+                                      });
+                                      getDatas();
+                                    },
+                                  },
+                                  {
+                                    text: "Autre montant",
+                                    onPress: () => {
+                                      setSelectedGoals(item);
+                                      setInputShown("add_contribution");
+                                      toggleSheet();
+                                    },
+                                  },
+                                ],
+                              );
+                            }
                           }}
                         >
-                          Epargner
-                        </Text>
-                      </TouchableOpacity>
+                          <MaterialIcons name="savings" size={20} color="white" />
+                          <Text style={{ color: "white", fontFamily: FONT_FAMILY.semibold, fontSize: 14 }}>Épargner</Text>
+                        </TouchableOpacity>
+
+                        {/* Bouton Clôture */}
+                        <TouchableOpacity
+                          style={{ paddingHorizontal: 12, paddingVertical: 12, backgroundColor: "#ef444420", borderRadius: 8, borderWidth: 1, borderColor: "#ef4444", alignItems: "center", justifyContent: "center" }}
+                          onPress={() => handleCloseGoal(item)}
+                        >
+                          <Feather name="x-circle" size={20} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
                   )}
                   scrollEnabled={false}
@@ -1000,7 +1108,7 @@ export default function TabFourScreen() {
           {inputShown === "add_goal" ? (
             <>
               <SegmentedControl
-                values={["Objectifs", "Epargne/Caisse"]}
+                values={["Objectif", "Périodique", "Tirelire"]}
                 selectedIndex={selectedIndex}
                 onChange={(event) => {
                   setSelectedIndex(event.nativeEvent.selectedSegmentIndex);
@@ -1009,6 +1117,7 @@ export default function TabFourScreen() {
                 activeFontStyle={{ fontFamily: FONT_FAMILY.bold, fontSize: 14 }}
                 style={{ height: 40 }}
               />
+              {/* ===== OBJECTIF ===== */}
               {selectedIndex === 0 ? (
                 <View style={{ gap: 18 }}>
                   <View style={{ gap: 8 }}>
@@ -1578,29 +1687,142 @@ export default function TabFourScreen() {
                     </View>
                   </View>
                 </View>
-              ) : (
+              ) : selectedIndex === 1 ? (
+                /* ===== PÉRIODIQUE ===== */
                 <View style={{ gap: 18 }}>
                   <View style={{ gap: 8 }}>
                     <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
-                      Titre de l'épargne
+                      Nom de l'épargne
                     </ThemedText>
                     <TextInput
-                      placeholder="Ex: Epargne"
+                      placeholder="Ex: Épargne voyage"
                       placeholderTextColor={COLORS.gray}
-                      style={{
-                        padding: 16,
-                        borderWidth: 1,
-                        borderColor: COLORS.gray,
-                        color: color,
-                        borderRadius: 8,
-                        flex: 1,
-                        fontFamily: FONT_FAMILY.regular,
-                      }}
-                      value={caisseData.nom}
-                      onChangeText={(e) =>
-                        setCaisseData((prev) => ({ ...prev, nom: e }))
-                      }
+                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      value={periodicData.name}
+                      onChangeText={(e) => setPeriodicData((prev) => ({ ...prev, name: e }))}
                     />
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant par période (${getSymbol()})`}</ThemedText>
+                    <TextInput
+                      placeholder="Ex: 5000"
+                      placeholderTextColor={COLORS.gray}
+                      keyboardType="numeric"
+                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      value={periodicData.amount_per_period}
+                      onChangeText={(e) => setPeriodicData((prev) => ({ ...prev, amount_per_period: e }))}
+                    />
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>Date de fin</ThemedText>
+                    {open4 && (
+                      <DateTimePicker
+                        mode="date"
+                        display="spinner"
+                        value={periodicData.target_date ? parseLocalDate(periodicData.target_date) : new Date()}
+                        onChange={onChange4}
+                        style={{ height: 120, marginTop: 20, width: "100%" }}
+                        textColor={color}
+                      />
+                    )}
+                    {open4 && Platform.OS === "ios" && (
+                      <View style={{ flexDirection: "row", justifyContent: "space-around", marginBottom: 20 }}>
+                        <TouchableOpacity style={{ padding: 10, backgroundColor: "gray", borderRadius: 10 }} onPress={toggleDatePicker4}>
+                          <Text style={{ color: "black", fontWeight: "bold" }}>Annuler</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={{ padding: 10, backgroundColor: "gray", borderRadius: 10 }} onPress={confirmIOSDate4}>
+                          <Text style={{ color: "black", fontWeight: "bold" }}>Valider</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    {!open4 && (
+                      <TouchableOpacity onPress={toggleDatePicker4}>
+                        <TextInput
+                          placeholder="Date de fin"
+                          placeholderTextColor={COLORS.gray}
+                          style={{ borderWidth: 1, borderColor: COLORS.gray, padding: 10, borderRadius: 10, color: color, fontFamily: FONT_FAMILY.regular, height: 52 }}
+                          editable={false}
+                          value={periodicData.target_date}
+                          onPressIn={toggleDatePicker4}
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>Fréquence d'épargne</ThemedText>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {([
+                        { key: "daily", label: "Journalière" },
+                        { key: "weekly", label: "Hebdo" },
+                        { key: "monthly", label: "Mensuelle" },
+                      ] as const).map((opt) => (
+                        <TouchableOpacity
+                          key={opt.key}
+                          style={{
+                            flex: 1,
+                            padding: 10,
+                            borderRadius: 10,
+                            borderWidth: periodicData.frequence === opt.key ? 2 : 1,
+                            borderColor: periodicData.frequence === opt.key ? COLORS.green : COLORS.gray,
+                            backgroundColor: periodicData.frequence === opt.key ? COLORS.green + "20" : "transparent",
+                            alignItems: "center",
+                          }}
+                          onPress={() => setPeriodicData((prev) => ({ ...prev, frequence: opt.key }))}
+                        >
+                          <Text style={{ fontFamily: FONT_FAMILY.medium, color: periodicData.frequence === opt.key ? COLORS.green : color, fontSize: 12 }}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {periodicProjection > 0 && (
+                    <View style={{ padding: 12, borderWidth: 1, borderColor: COLORS.green, borderRadius: 12, backgroundColor: COLORS.green + "20", gap: 4 }}>
+                      <Text style={{ fontFamily: FONT_FAMILY.semibold, color: COLORS.green, fontSize: 13 }}>Montant total projeté</Text>
+                      <Text style={{ fontFamily: FONT_FAMILY.bold, fontSize: 22, color: COLORS.green }}>
+                        {formatInCurrency(periodicProjection)}
+                      </Text>
+                      <Text style={{ fontFamily: FONT_FAMILY.regular, color: COLORS.gray, fontSize: 12 }}>
+                        En épargnant {formatInCurrency(parseFloat(periodicData.amount_per_period) || 0)} par {periodicData.frequence === "daily" ? "jour" : periodicData.frequence === "weekly" ? "semaine" : "mois"} jusqu'au {periodicData.target_date}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+              ) : (
+                /* ===== TIRELIRE ===== */
+                <View style={{ gap: 18 }}>
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Nom de la tirelire
+                    </ThemedText>
+                    <TextInput
+                      placeholder="Ex: Tirelire famille"
+                      placeholderTextColor={COLORS.gray}
+                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      value={jarData.name}
+                      onChangeText={(e) => setJarData((prev) => ({ ...prev, name: e }))}
+                    />
+                  </View>
+                  <View style={{ gap: 8 }}>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant initial (${getSymbol()})`}</ThemedText>
+                    <TextInput
+                      placeholder="Ex: 0"
+                      placeholderTextColor={COLORS.gray}
+                      keyboardType="numeric"
+                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      value={jarData.initial_amount}
+                      onChangeText={(e) => setJarData((prev) => ({ ...prev, initial_amount: e }))}
+                    />
+                  </View>
+                  <View style={{ padding: 12, borderRadius: 12, backgroundColor: COLORS.gray + "20", gap: 4 }}>
+                    <Text style={{ fontFamily: FONT_FAMILY.regular, color: COLORS.gray, fontSize: 13 }}>
+                      La tirelire n'a pas de montant cible ni de date. Tu y déposes ce que tu veux, quand tu veux.
+                    </Text>
                   </View>
                 </View>
               )}

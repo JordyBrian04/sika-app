@@ -293,41 +293,53 @@ const DetailGoal = () => {
   }, [amount]);
 
   const handleSave = async () => {
-    if (
-      !epargneData.name ||
-      parseFloat(epargneData.target_amount) <= 0 ||
-      !epargneData.target_date ||
-      !epargneData.start_date ||
-      parseFloat(epargneData.min_weekly) <= 0
-    ) {
-      // Handle the case where some fields are missing
-      alert("Veuillez remplir tous les champs correctement.");
-      return;
-    }
-
     setLoading2(true);
     try {
-      await updateGoal(id as any, {
-        name: epargneData.name, // You should replace this with the actual goal ID
-        target_amount: parseFloat(epargneData.target_amount),
-        target_date: epargneData.target_date,
-        priority: epargneData.priority as any,
-        min_weekly: parseFloat(epargneData.min_weekly),
-        frequence: epargneData.frequence as any,
-      });
+      const goalType = goals?.goal_type ?? "objective";
+
+      if (goalType === "jar") {
+        if (!epargneData.name) { alert("Veuillez entrer un nom."); setLoading2(false); return; }
+        await updateGoal(id as any, { name: epargneData.name });
+
+      } else if (goalType === "periodic") {
+        if (!epargneData.name || parseFloat(epargneData.min_weekly) <= 0) {
+          alert("Nom et montant par période requis."); setLoading2(false); return;
+        }
+        await updateGoal(id as any, {
+          name: epargneData.name,
+          min_weekly: parseFloat(epargneData.min_weekly),
+          target_date: epargneData.target_date,
+          frequence: epargneData.frequence as any,
+        });
+
+      } else {
+        // objective — comportement existant
+        if (
+          !epargneData.name ||
+          parseFloat(epargneData.target_amount) <= 0 ||
+          !epargneData.target_date ||
+          !epargneData.start_date ||
+          parseFloat(epargneData.min_weekly) <= 0
+        ) {
+          alert("Veuillez remplir tous les champs correctement.");
+          setLoading2(false);
+          return;
+        }
+        await updateGoal(id as any, {
+          name: epargneData.name,
+          target_amount: parseFloat(epargneData.target_amount),
+          target_date: epargneData.target_date,
+          priority: epargneData.priority as any,
+          min_weekly: parseFloat(epargneData.min_weekly),
+          frequence: epargneData.frequence as any,
+        });
+        setPeriodeDAtats({ min_dayly: 0, min_weekly: 0, min_monthly: 0 });
+      }
 
       closeModal();
-      setPeriodeDAtats({
-        min_dayly: 0,
-        min_weekly: 0,
-        min_monthly: 0,
-      });
-
       router.back();
     } catch (error) {
-      alert(
-        "Une erreur est survenue lors de la mise à jour de l'épargne. Veuillez réessayer.",
-      );
+      alert("Une erreur est survenue lors de la mise à jour de l'épargne. Veuillez réessayer.");
       console.error("Error updating goal:", error);
     } finally {
       setLoading2(false);
@@ -727,11 +739,10 @@ const DetailGoal = () => {
                 {inputShown === "add_goal" ? (
                   <>
                     <View style={{ gap: 18 }}>
+                      {/* --- Nom (commun à tous les types) --- */}
                       <View style={{ gap: 8 }}>
-                        <ThemedText
-                          style={{ fontFamily: FONT_FAMILY.semibold }}
-                        >
-                          Titre de l'épargne
+                        <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                          {goals?.goal_type === "jar" ? "Nom de la tirelire" : goals?.goal_type === "periodic" ? "Nom de l'épargne" : "Titre de l'épargne"}
                         </ThemedText>
                         <TextInput
                           placeholder="Ex: Epargne fin d'année"
@@ -752,6 +763,74 @@ const DetailGoal = () => {
                         />
                       </View>
 
+                      {/* --- Périodique : montant/période + date fin + fréquence --- */}
+                      {goals?.goal_type === "periodic" && (<>
+                        <View style={{ gap: 8 }}>
+                          <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant par période (${getSymbol()})`}</ThemedText>
+                          <TextInput
+                            placeholder="Ex: 5000"
+                            placeholderTextColor={COLORS.gray}
+                            keyboardType="numeric"
+                            style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                            value={epargneData.min_weekly}
+                            onChangeText={(e) => setEpargneData({ ...epargneData, min_weekly: e })}
+                          />
+                        </View>
+                        <View style={{ gap: 8 }}>
+                          <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>Date de fin</ThemedText>
+                          {open && (
+                            <DateTimePicker mode="date" display="spinner"
+                              value={epargneData.target_date ? new Date(epargneData.target_date) : new Date()}
+                              onChange={onChange}
+                              style={{ height: 120, marginTop: 20, width: "100%" }}
+                              textColor="#000"
+                            />
+                          )}
+                          {open && Platform.OS === "ios" && (
+                            <View style={{ flexDirection: "row", justifyContent: "space-around", marginBottom: 20 }}>
+                              <TouchableOpacity style={{ padding: 10, backgroundColor: "gray", borderRadius: 10 }} onPress={toggleDatePicker}>
+                                <Text style={{ color: "black", fontWeight: "bold" }}>Annuler</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={{ padding: 10, backgroundColor: "gray", borderRadius: 10 }} onPress={confirmIOSDate}>
+                                <Text style={{ color: "black", fontWeight: "bold" }}>Valider</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                          {!open && (
+                            <TouchableOpacity onPress={toggleDatePicker}>
+                              <TextInput placeholder="Date de fin" placeholderTextColor={COLORS.gray}
+                                style={{ borderWidth: 1, borderColor: COLORS.gray, padding: 10, borderRadius: 10, color: color, fontFamily: FONT_FAMILY.regular, height: 52 }}
+                                editable={false} value={epargneData.target_date} onPressIn={toggleDatePicker}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        <View style={{ gap: 8 }}>
+                          <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>Fréquence</ThemedText>
+                          <View style={{ flexDirection: "row", gap: 8 }}>
+                            {([{ key: "daily", label: "Journalière" }, { key: "weekly", label: "Hebdo" }, { key: "monthly", label: "Mensuelle" }] as const).map((opt) => (
+                              <TouchableOpacity key={opt.key}
+                                style={{ flex: 1, padding: 10, borderRadius: 10, borderWidth: epargneData.frequence === opt.key ? 2 : 1, borderColor: epargneData.frequence === opt.key ? COLORS.green : COLORS.gray, backgroundColor: epargneData.frequence === opt.key ? COLORS.green + "20" : "transparent", alignItems: "center" }}
+                                onPress={() => setEpargneData({ ...epargneData, frequence: opt.key })}
+                              >
+                                <Text style={{ fontFamily: FONT_FAMILY.medium, color: epargneData.frequence === opt.key ? COLORS.green : color, fontSize: 12 }}>{opt.label}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      </>)}
+
+                      {/* --- Tirelire : rien d'autre --- */}
+                      {goals?.goal_type === "jar" && (
+                        <View style={{ padding: 12, borderRadius: 12, backgroundColor: COLORS.gray + "20" }}>
+                          <Text style={{ fontFamily: FONT_FAMILY.regular, color: COLORS.gray, fontSize: 13 }}>
+                            La tirelire n'a pas de montant cible ni de date. Seul le nom est modifiable.
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* --- Objectif uniquement : montant cible, dates, priorité, périodique mini --- */}
+                      {(goals?.goal_type === "objective" || !goals?.goal_type) && (<>
                       <View style={{ gap: 8 }}>
                         <ThemedText
                           style={{ fontFamily: FONT_FAMILY.semibold }}
@@ -1272,6 +1351,7 @@ const DetailGoal = () => {
                           </TouchableOpacity>
                         </View>
                       </View>
+                      </>)}
                     </View>
 
                     <TouchableOpacity
@@ -1294,7 +1374,7 @@ const DetailGoal = () => {
                             fontFamily: FONT_FAMILY.semibold,
                           }}
                         >
-                          Enregistrer l'épargne
+                          Enregistrer
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -1722,270 +1802,103 @@ const DetailGoal = () => {
               gap: 18,
             }}
           >
-            {(() => {
-              const pct = calculatePercentage(
-                goalDetails?.saved_amount,
-                goals?.target_amount,
-              );
+            {/* CircularProgress : seulement pour objective et periodic */}
+            {goals?.goal_type !== "jar" && (() => {
+              const pct = calculatePercentage(goalDetails?.saved_amount, goals?.target_amount);
               return (
-                <CircularProgressBar
-                  radius={R}
-                  strokeWidth={STROKE_WIDTH}
-                  percentage={pct}
-                  end={pct / 100}
-                />
+                <CircularProgressBar radius={R} strokeWidth={STROKE_WIDTH} percentage={pct} end={pct / 100} />
               );
             })()}
+
+            {/* Tirelire : icône savings à la place */}
+            {goals?.goal_type === "jar" && (
+              <View style={{ width: R * 2, height: R * 2, borderRadius: R, borderWidth: STROKE_WIDTH, borderColor: COLORS.primary + "50", alignItems: "center", justifyContent: "center" }}>
+                <FontAwesome5 name="piggy-bank" size={R * 0.8} color={COLORS.primary} />
+              </View>
+            )}
 
             <ThemedText style={{ fontSize: 18, fontFamily: FONT_FAMILY.bold }}>
               {goals ? goals.name : " "}
             </ThemedText>
 
-            <View
-              style={{ justifyContent: "center", alignItems: "center", gap: 6 }}
-            >
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontFamily: FONT_FAMILY.medium,
-                  color: COLORS.gray,
-                  textAlign: "center",
-                }}
-              >
-                Reste à épargner
+            <View style={{ justifyContent: "center", alignItems: "center", gap: 6 }}>
+              <Text style={{ fontSize: 16, fontFamily: FONT_FAMILY.medium, color: COLORS.gray, textAlign: "center" }}>
+                {goals?.goal_type === "jar" ? "Total épargné" : "Reste à épargner"}
               </Text>
-              <ThemedText
-                style={{ fontSize: 20, fontFamily: FONT_FAMILY.bold }}
-              >
-                {displayAmount(goalDetails?.remaining_amount)}
+              <ThemedText style={{ fontSize: 20, fontFamily: FONT_FAMILY.bold }}>
+                {goals?.goal_type === "jar"
+                  ? displayAmount(goalDetails?.saved_amount)
+                  : displayAmount(goalDetails?.remaining_amount)}
               </ThemedText>
             </View>
 
-            <View
-              style={{
-                width: "100%",
-                justifyContent: "center",
-                alignItems: "center",
-                flexDirection: "row",
-                gap: 12,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 10,
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  padding: 8,
-                  borderRadius: 25,
-                  borderColor:
-                    goalDetails.status === "ahead"
-                      ? COLORS.green
-                      : goalDetails.status === "on_track"
-                        ? COLORS.blue
-                        : COLORS.red,
-                  backgroundColor:
-                    goalDetails.status === "ahead"
-                      ? COLORS.green + "20"
-                      : goalDetails.status === "on_track"
-                        ? COLORS.blue + "20"
-                        : COLORS.red + "20",
-                }}
-              >
-                <Image
-                  source={
-                    goalDetails.status === "ahead"
-                      ? require("../../assets/images/trend.png")
-                      : goalDetails.status === "on_track"
-                        ? require("../../assets/images/minus.png")
-                        : require("../../assets/images/downtrend.png")
-                  }
-                  style={{ width: 24, height: 24 }}
-                  tintColor={
-                    goalDetails.status === "ahead"
-                      ? COLORS.green
-                      : goalDetails.status === "on_track"
-                        ? COLORS.blue
-                        : COLORS.red
-                  }
-                />
-                <Text
+            {/* Badges statut + fréquence : seulement objective et periodic */}
+            {goals?.goal_type !== "jar" && (
+              <View style={{ width: "100%", justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 12 }}>
+                <View
                   style={{
-                    fontSize: 12,
-                    fontFamily: FONT_FAMILY.medium,
-                    color:
-                      goalDetails.status === "ahead"
-                        ? COLORS.green
-                        : goalDetails.status === "on_track"
-                          ? COLORS.blue
-                          : COLORS.red,
+                    flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "center",
+                    borderWidth: 1, padding: 8, borderRadius: 25,
+                    borderColor: goalDetails.status === "ahead" ? COLORS.green : goalDetails.status === "on_track" ? COLORS.blue : COLORS.red,
+                    backgroundColor: goalDetails.status === "ahead" ? COLORS.green + "20" : goalDetails.status === "on_track" ? COLORS.blue + "20" : COLORS.red + "20",
                   }}
                 >
-                  {goalDetails.status === "ahead"
-                    ? "En avance"
-                    : goalDetails.status === "on_track"
-                      ? "Sur la bonne voie"
-                      : "En retard"}
-                </Text>
-              </View>
+                  <Image
+                    source={goalDetails.status === "ahead" ? require("../../assets/images/trend.png") : goalDetails.status === "on_track" ? require("../../assets/images/minus.png") : require("../../assets/images/downtrend.png")}
+                    style={{ width: 24, height: 24 }}
+                    tintColor={goalDetails.status === "ahead" ? COLORS.green : goalDetails.status === "on_track" ? COLORS.blue : COLORS.red}
+                  />
+                  <Text style={{ fontSize: 12, fontFamily: FONT_FAMILY.medium, color: goalDetails.status === "ahead" ? COLORS.green : goalDetails.status === "on_track" ? COLORS.blue : COLORS.red }}>
+                    {goalDetails.status === "ahead" ? "En avance" : goalDetails.status === "on_track" ? "Sur la bonne voie" : "En retard"}
+                  </Text>
+                </View>
 
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  padding: 8,
-                  borderRadius: 25,
-                  borderColor: COLORS.gray,
-                  backgroundColor: COLORS.gray + "20",
-                }}
-              >
-                <FontAwesome name="calendar-o" size={20} color={COLORS.gray} />
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontFamily: FONT_FAMILY.medium,
-                    color: COLORS.gray,
-                  }}
-                >
-                  {displayAmount(goals.min_weekly)} /{" "}
-                  {goals.frequence === "weekly"
-                    ? "semaine"
-                    : goals.frequence === "monthly"
-                      ? "mois"
-                      : "jour"}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", borderWidth: 1, padding: 8, borderRadius: 25, borderColor: COLORS.gray, backgroundColor: COLORS.gray + "20" }}>
+                  <FontAwesome name="calendar-o" size={20} color={COLORS.gray} />
+                  <Text style={{ fontSize: 12, fontFamily: FONT_FAMILY.medium, color: COLORS.gray }}>
+                    {displayAmount(goals.min_weekly)} / {goals.frequence === "weekly" ? "semaine" : goals.frequence === "monthly" ? "mois" : "jour"}
+                  </Text>
+                </View>
               </View>
-            </View>
-          </View>
-
-          <View
-            style={{
-              //   padding: 10,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <View
-              style={{
-                padding: 12,
-                borderRadius: 15,
-                backgroundColor:
-                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                // justifyContent: "center",
-                // alignItems: "center",
-                gap: 18,
-                width: "48%",
-              }}
-            >
-              <View style={{ gap: 4 }}>
-                <Text
-                  style={{
-                    fontFamily: FONT_FAMILY.medium,
-                    fontSize: 14,
-                    color: COLORS.gray,
-                  }}
-                >
-                  DATE CIBLE
-                </Text>
-                <ThemedText
-                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 16 }}
-                >
-                  {new Date(goals.target_date).toLocaleDateString("fr-FR", {
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </ThemedText>
-              </View>
-
-              <View
-                style={{ gap: 4, flexDirection: "row", alignItems: "center" }}
-              >
-                <Fontisto name="flag" size={17} color={COLORS.gray} />
-                <Text
-                  style={{
-                    fontFamily: FONT_FAMILY.medium,
-                    fontSize: 12,
-                    color: COLORS.gray,
-                  }}
-                >
-                  OBJECTIF INITIAL
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={{
-                padding: 12,
-                borderRadius: 15,
-                backgroundColor:
-                  color === "#FFFFFF" ? COLORS.dark : COLORS.white,
-                // justifyContent: "center",
-                // alignItems: "center",
-                gap: 18,
-                width: "48%",
-              }}
-            >
-              <View style={{ gap: 4 }}>
-                <Text
-                  style={{
-                    fontFamily: FONT_FAMILY.medium,
-                    fontSize: 12,
-                    color: COLORS.gray,
-                  }}
-                >
-                  PROJECTION ACTUELLE
-                </Text>
-                <ThemedText
-                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 16 }}
-                >
-                  {new Date(goalProjections.projected_date).toLocaleDateString(
-                    "fr-FR",
-                    {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    },
-                  )}
-                </ThemedText>
-              </View>
-
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 10,
-                  justifyContent: "center",
-                  borderWidth: 1,
-                  padding: 8,
-                  borderRadius: 25,
-                  backgroundColor: COLORS.green + "20",
-                  borderColor: COLORS.green,
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: FONT_FAMILY.medium,
-                    fontSize: 12,
-                    color: COLORS.green,
-                  }}
-                >
-                  {goalProjections.delta_days_vs_target} jours
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <ProgressBar
-            currentProgress={calculatePercentage(
-              goalDetails?.saved_amount,
-              goals?.target_amount,
             )}
-          />
+          </View>
+
+          {/* DATE CIBLE + PROJECTION : masqué pour tirelire */}
+          {goals?.goal_type !== "jar" && (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View style={{ padding: 12, borderRadius: 15, backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white, gap: 18, width: "48%" }}>
+                <View style={{ gap: 4 }}>
+                  <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 14, color: COLORS.gray }}>DATE CIBLE</Text>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 16 }}>
+                    {new Date(goals.target_date).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+                  </ThemedText>
+                </View>
+                <View style={{ gap: 4, flexDirection: "row", alignItems: "center" }}>
+                  <Fontisto name="flag" size={17} color={COLORS.gray} />
+                  <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 12, color: COLORS.gray }}>OBJECTIF INITIAL</Text>
+                </View>
+              </View>
+
+              <View style={{ padding: 12, borderRadius: 15, backgroundColor: color === "#FFFFFF" ? COLORS.dark : COLORS.white, gap: 18, width: "48%" }}>
+                <View style={{ gap: 4 }}>
+                  <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 12, color: COLORS.gray }}>PROJECTION ACTUELLE</Text>
+                  <ThemedText style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 16 }}>
+                    {new Date(goalProjections.projected_date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                  </ThemedText>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "center", borderWidth: 1, padding: 8, borderRadius: 25, backgroundColor: COLORS.green + "20", borderColor: COLORS.green }}>
+                  <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 12, color: COLORS.green }}>{goalProjections.delta_days_vs_target} jours</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* ProgressBar : masqué pour tirelire */}
+          {goals?.goal_type !== "jar" && (
+            <ProgressBar
+              currentProgress={calculatePercentage(goalDetails?.saved_amount, goals?.target_amount)}
+            />
+          )}
 
           <View
             style={{
@@ -2125,40 +2038,45 @@ const DetailGoal = () => {
               flexDirection: "row",
               gap: 12,
             }}
-            onPress={() =>
-              Alert.alert(
-                "Epargner",
-                "Epargner le montant défini ou un autre montant ?",
-                [
-                  {
-                    text: "Montant défini",
-                    onPress: async () => {
-                      await addContribution({
-                        goal_id: id as any,
-                        amount: goals?.min_weekly,
-                        date: new Date().toISOString().substring(0, 10),
-                        source: "manual",
-                      });
-                      getDatas();
+            onPress={() => {
+              if (goals?.goal_type === "jar") {
+                // Tirelire : saisie libre directe
+                setSelectedGoals(goals);
+                setInputShown("add_contribution");
+                openModal("epargneModal");
+              } else {
+                Alert.alert(
+                  "Épargner",
+                  "Épargner le montant défini ou un autre montant ?",
+                  [
+                    {
+                      text: "Montant défini",
+                      onPress: async () => {
+                        await addContribution({
+                          goal_id: id as any,
+                          amount: goals?.min_weekly,
+                          date: new Date().toISOString().substring(0, 10),
+                          source: "manual",
+                        });
+                        getDatas();
+                      },
                     },
-                  },
-                  {
-                    text: "Autre montant",
-                    onPress: () => {
-                      setSelectedGoals(goals);
-                      setInputShown("add_contribution");
-                      openModal("epargneModal");
+                    {
+                      text: "Autre montant",
+                      onPress: () => {
+                        setSelectedGoals(goals);
+                        setInputShown("add_contribution");
+                        openModal("epargneModal");
+                      },
                     },
-                  },
-                ],
-              )
-            }
+                  ],
+                );
+              }
+            }}
           >
             <FontAwesome5 name="piggy-bank" size={24} color={COLORS.white} />
-            <Text
-              style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.white }}
-            >
-              Epargner
+            <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.white }}>
+              Épargner
             </Text>
           </TouchableOpacity>
 

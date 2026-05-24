@@ -50,7 +50,7 @@ async function grantXpOnce(action: string, refId: number, xp: number) {
   // 1) on enregistre l’événement XP (si déjà existant => doublon)
   try {
     await runSql(
-      `INSERT INTO xp_events (action, ref_id, xp) VALUES (?, ?, ?)`,
+      `INSERT OR IGNORE INTO xp_events (action, ref_id, xp) VALUES (?, ?, ?)`,
       [action, refId, xp],
     );
   } catch {
