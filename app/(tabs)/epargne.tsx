@@ -4,8 +4,6 @@ import { ThemedView } from "@/components/themed-view";
 import { COLORS } from "@/components/ui/color";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import { useCurrency } from "@/src/context/CurrencyContext";
-import { listeCategories } from "@/src/db/repositories/category";
-import { addTransaction } from "@/src/db/repositories/transactions";
 import { isUserPro, requirePro } from "@/src/services/cloud/planCheck";
 import {
     convertToFCFA,
@@ -593,18 +591,6 @@ export default function TabFourScreen() {
         amount: parseFloat(contribution.amount),
         date: contribution.date,
         source: "manual",
-      });
-
-      const cat = await listeCategories();
-
-      await addTransaction({
-        amount: parseFloat(contribution.amount),
-        type: "depense",
-        date: toYYYYMMDD(new Date()),
-        note: `Contribution sur l'épargne : ${selectedGoals.name}`,
-        category_id: cat.find(
-          (c) => c.name.toLowerCase().includes("autre") && c.type === "depense",
-        )?.id,
       });
 
       toggleSheet();

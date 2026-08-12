@@ -42,7 +42,10 @@ async function sendBudgetNotification(title: string, body: string): Promise<void
       sound: "default",
       data: { kind: "BUDGET_ALERT" },
     },
-    trigger: null, // immediat
+    trigger: {
+      seconds: 1,
+      channelId: BUDGET_CHANNEL_ID,
+    } as Notifications.TimeIntervalTriggerInput,
   });
 }
 
@@ -68,8 +71,7 @@ export async function checkBudgetThresholdAlerts(
   month: number,
   year: number
 ): Promise<void> {
-  if (!(await isPro())) return;
-
+  // Alertes seuils 80%/100% disponibles pour tous (free + pro)
   const budget = await getOne<{ limit_amount: number }>(
     `SELECT limit_amount FROM budgets
      WHERE category_id = ? AND month = ? AND year = ?`,

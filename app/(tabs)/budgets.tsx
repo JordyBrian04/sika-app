@@ -1,38 +1,40 @@
 import { ThemedText } from "@/components/themed-text";
 import { COLORS } from "@/components/ui/color";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { displayMoney } from "@/src/utils/format";
-import { useCurrency } from "@/src/context/CurrencyContext";
-import { convertToFCFA, fetchRates } from "@/src/services/currency/currencyService";
-import { getSymbol } from "@/src/services/currency/currencyStore";
 import BottomSheet, { BottomSheetRefProps } from "@/src/components/BottomSheet";
+import { useCurrency } from "@/src/context/CurrencyContext";
+import { getOne } from "@/src/db";
 import {
-  addBudget,
-  deleteBudget,
-  editBudget,
-  getCategoryMonthlyExpense,
+    addBudget,
+    deleteBudget,
+    editBudget,
+    getCategoryMonthlyExpense,
 } from "@/src/db/repositories/budgetRepo";
 import { listeCategories } from "@/src/db/repositories/category";
-import { getOne } from "@/src/db";
-import { requirePro, isUserPro } from "@/src/services/cloud/planCheck";
+import { isUserPro, requirePro } from "@/src/services/cloud/planCheck";
+import {
+    convertToFCFA,
+    fetchRates,
+} from "@/src/services/currency/currencyService";
+import { getSymbol } from "@/src/services/currency/currencyStore";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { AntDesign, Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
 
@@ -57,6 +59,16 @@ export default function TabTwoScreen() {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
   const [datas, setDatas] = useState<any[]>([]);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+
+  // Jours restants dans le mois affiché (inclut aujourd'hui, min 1)
+  const getRemainingDaysInMonth = (month: number, year: number): number => {
+    const today = new Date();
+    const isCurrentMonth =
+      today.getMonth() + 1 === month && today.getFullYear() === year;
+    if (!isCurrentMonth) return 0; // mois passé ou futur → pas de calcul
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return Math.max(daysInMonth - today.getDate() + 1, 1);
+  };
   const [budgetDataset, setBudgetDataset] = useState<any>({
     id: 0,
     mois: currentMonth,
@@ -180,16 +192,20 @@ export default function TabTwoScreen() {
         if (!pro) {
           const countRow = await getOne<{ c: number }>(
             `SELECT COUNT(*) as c FROM budgets WHERE month = ? AND year = ?`,
-            [budgetDataset.mois, budgetDataset.annee]
+            [budgetDataset.mois, budgetDataset.annee],
           );
           if ((countRow?.c ?? 0) >= 3) {
             setLoading(false);
-            await requirePro("Les budgets illimités (tu as atteint la limite de 3 budgets/mois)");
+            await requirePro(
+              "Les budgets illimités (tu as atteint la limite de 3 budgets/mois)",
+            );
             return;
           }
         }
         // Conversion vers FCFA (stockage interne)
-        const montantFCFA = await toFCFA(parseFloat(budgetDataset.montant) || 0);
+        const montantFCFA = await toFCFA(
+          parseFloat(budgetDataset.montant) || 0,
+        );
         await addBudget(
           budgetDataset.mois,
           budgetDataset.annee,
@@ -197,7 +213,9 @@ export default function TabTwoScreen() {
           montantFCFA,
         );
       } else {
-        const montantFCFA = await toFCFA(parseFloat(budgetDataset.montant) || 0);
+        const montantFCFA = await toFCFA(
+          parseFloat(budgetDataset.montant) || 0,
+        );
         await editBudget(
           budgetDataset.id,
           budgetDataset.mois,
@@ -451,6 +469,60 @@ export default function TabTwoScreen() {
           </ThemedText>
         </View>
 
+        {/* Dépensable par jour */}
+        {(() => {
+          const remainingDays = getRemainingDaysInMonth(
+            currentMonth,
+            currentYear,
+          );
+          if (remainingDays <= 0) return null;
+          const dailyAllowance = Math.floor(item.remaining / remainingDays);
+          return (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor:
+                  dailyAllowance > 0 ? COLORS.green + "15" : COLORS.red + "15",
+                borderRadius: 8,
+                padding: 10,
+                borderWidth: 1,
+                borderColor:
+                  dailyAllowance > 0 ? COLORS.green + "40" : COLORS.red + "40",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={16}
+                  color={dailyAllowance > 0 ? COLORS.green : COLORS.red}
+                />
+                <Text
+                  style={{
+                    fontFamily: FONT_FAMILY.medium,
+                    fontSize: 12,
+                    color: dailyAllowance > 0 ? COLORS.green : COLORS.red,
+                  }}
+                >
+                  Dépenses recommandées :
+                </Text>
+              </View>
+              <Text
+                style={{
+                  fontFamily: FONT_FAMILY.bold,
+                  fontSize: 14,
+                  color: dailyAllowance > 0 ? COLORS.green : COLORS.red,
+                }}
+              >
+                {displayAmount(Math.max(dailyAllowance, 0))}/jour
+              </Text>
+            </View>
+          );
+        })()}
+
         <View
           style={{
             flexDirection: "row",
@@ -647,7 +719,10 @@ export default function TabTwoScreen() {
               </ThemedText>
               <SelectList
                 setSelected={(val: any) =>
-                  setBudgetDataset((prev: any) => ({ ...prev, mois: Number(val) }))
+                  setBudgetDataset((prev: any) => ({
+                    ...prev,
+                    mois: Number(val),
+                  }))
                 }
                 key={keyReset}
                 data={MOIS}
@@ -705,7 +780,10 @@ export default function TabTwoScreen() {
             </ThemedText>
             <SelectList
               setSelected={(val: any) =>
-                setBudgetDataset((prev: any) => ({ ...prev, categorie: Number(val) }))
+                setBudgetDataset((prev: any) => ({
+                  ...prev,
+                  categorie: Number(val),
+                }))
               }
               data={categories}
               save="key"

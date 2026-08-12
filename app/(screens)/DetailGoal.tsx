@@ -6,9 +6,7 @@ import { BottomSheetRefProps } from "@/src/components/BottomSheet";
 import ProgressBar from "@/src/components/ProgressBar";
 import { Slider } from "@/src/components/Slider";
 import { getCatWithMoreExpense } from "@/src/db/repositories/budgetRepo";
-import { listeCategories } from "@/src/db/repositories/category";
 import { getMonthlyExpense } from "@/src/db/repositories/financeRepo";
-import { addTransaction } from "@/src/db/repositories/transactions";
 import {
   getAIInsights,
   getAIInsightsTop3,
@@ -359,18 +357,6 @@ const DetailGoal = () => {
         amount: parseFloat(contribution.amount),
         date: contribution.date,
         source: "manual",
-      });
-
-      const cat = await listeCategories();
-
-      await addTransaction({
-        amount: parseFloat(contribution.amount),
-        type: "depense",
-        date: toYYYYMMDD(new Date()),
-        note: `Contribution sur l'épargne : ${goals.name}`,
-        category_id: cat.find(
-          (c) => c.name.toLowerCase().includes("autre") && c.type === "depense",
-        )?.id,
       });
 
       closeModal();

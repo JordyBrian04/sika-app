@@ -7,9 +7,9 @@ import React from "react";
 import { Alert, Image, Pressable, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from "react-native-reanimated";
 import { useCurrency } from "../context/CurrencyContext";
 import { FONT_FAMILY } from "../theme/fonts";
@@ -203,8 +203,18 @@ const SwipeableTransaction = ({ trans, onPress, onPressEdit }: any) => {
 
             {/* Section Montant */}
             <ThemedText
-              style={{ fontSize: 14, fontFamily: FONT_FAMILY.semibold }}
+              style={{
+                fontSize: 14,
+                fontFamily: FONT_FAMILY.semibold,
+                // color:
+                //   trans.type === "entree"
+                //     ? "#34C759"
+                //     : trans.type === "depense"
+                //       ? "#FF3B30"
+                //       : "#888",
+              }}
             >
+              {trans.type === "entree" ? "+" : "-"}
               {displayAmount(trans.amount)}
             </ThemedText>
           </Pressable>

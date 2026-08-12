@@ -11,6 +11,8 @@ import "react-native-reanimated";
 import { UserInactivityProvider } from "@/context/UserInactivity";
 import { CurrencyProvider } from "@/src/context/CurrencyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { registerAutoSync } from "@/src/services/cloud/autoSync";
+import { checkAndSendMonthlyRecap } from "@/src/notifications/monthlyRecap";
 import { enableAutoBackup, isAutoBackupEnabled } from "@/src/db/autoBackupTask";
 import { ensureAndroidChannels } from "@/src/notifications/channels";
 import {
@@ -102,9 +104,16 @@ export default function RootLayout() {
       eodsub = registerEODNotificationListener(minWeekly.current);
     })();
 
+    // Bilan mensuel (dernier jour du mois uniquement, silencieux)
+    checkAndSendMonthlyRecap().catch(() => {});
+
+    // Auto-sync cloud (Pro uniquement, silencieux)
+    const cleanupAutoSync = registerAutoSync();
+
     return () => {
       sub?.remove();
       eodsub?.remove();
+      cleanupAutoSync();
     };
   }, [ready]);
 

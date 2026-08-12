@@ -1,7 +1,8 @@
 import * as Notifications from "expo-notifications";
 
-export const EOD_CHANNEL_ID = "eod";
-export const BUDGET_CHANNEL_ID = "budget_alerts";
+export const EOD_CHANNEL_ID     = "eod";
+export const BUDGET_CHANNEL_ID  = "budget_alerts";
+export const MONTHLY_CHANNEL_ID = "monthly_recap";
 
 export async function ensureAndroidChannels() {
   await Notifications.setNotificationChannelAsync(EOD_CHANNEL_ID, {
@@ -18,5 +19,13 @@ export async function ensureAndroidChannels() {
     sound: "default",
     vibrationPattern: [0, 250, 250, 250],
     lightColor: "#FF6B6B",
+  });
+
+  await Notifications.setNotificationChannelAsync(MONTHLY_CHANNEL_ID, {
+    name: "Bilan mensuel",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "default",
+    vibrationPattern: [0, 300, 200, 300],
+    lightColor: "#265ED7",
   });
 }

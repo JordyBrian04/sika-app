@@ -1,6 +1,7 @@
 import { autoCheckNoSpendDay } from "@/src/services/missions/noSpendDay";
 import { checkSpendingPaceAlerts } from "@/src/notifications/budgetAlerts";
 import { checkOverdueRecurringPayments } from "@/src/notifications/recurringNotifications";
+import { checkAndSendMonthlyRecap } from "@/src/notifications/monthlyRecap";
 import * as Notifications from "expo-notifications";
 
 export function registerEODNotificationListener(minWeekly: number) {
@@ -17,5 +18,8 @@ export function registerEODNotificationListener(minWeekly: number) {
     // Alerte paiements récurrents oubliés (pending depuis > 1 jour)
     const today = new Date().toISOString().substring(0, 10);
     checkOverdueRecurringPayments(today).catch(() => {});
+
+    // Bilan mensuel (dernier jour du mois uniquement)
+    checkAndSendMonthlyRecap().catch(() => {});
   });
 }

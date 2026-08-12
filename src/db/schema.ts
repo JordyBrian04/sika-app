@@ -1,5 +1,5 @@
 export const DB_NAME = "budget.db";
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 export const migrations: Record<number, string[]> = {
   1: [
@@ -407,5 +407,14 @@ ON goal_contributions(goal_id, date);`,
   10: [
     // Corriger les tirelires existantes (target_date='9999-12-31' = sentinel jar)
     `UPDATE saving_goals SET goal_type = 'jar' WHERE target_date = '9999-12-31';`,
+  ],
+
+  11: [
+    // Supprimer les anciennes transactions "Contribution sur l'épargne" créées en doublon.
+    // Depuis cette version, les contributions épargne ne génèrent plus de transaction depense —
+    // elles sont lues directement depuis goal_contributions pour le calcul du solde.
+    `DELETE FROM transactions
+     WHERE type = 'depense'
+       AND note LIKE 'Contribution sur l''épargne%';`,
   ],
 };
