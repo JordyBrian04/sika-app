@@ -71,17 +71,19 @@ export default function ClotureMois() {
   // ─── Chargement des données ────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
-      const theo = await getTheoreticalBalance(selectedMonth, selectedYear);
-      setTheoreticalBalance(theo);
-
       const closed = await isMonthClosed(selectedMonth, selectedYear);
       setAlreadyClosed(closed);
 
       if (closed) {
         const c = await getClosureForMonth(selectedMonth, selectedYear);
         setExistingClosure(c);
+        // Utiliser le théorique sauvegardé au moment de la clôture
+        // (pas de recalcul — la transaction d'ajustement fausserait le résultat)
+        setTheoreticalBalance(c?.theoretical_balance ?? 0);
       } else {
         setExistingClosure(null);
+        const theo = await getTheoreticalBalance(selectedMonth, selectedYear);
+        setTheoreticalBalance(theo);
       }
 
       const hist = await listClosures(12);
@@ -285,8 +287,9 @@ export default function ClotureMois() {
               {displayAmount(Number(theoreticalBalance))}
             </Text>
             <Text style={[styles.cardHint, { color: COLORS.gray }]}>
-              Calculé à partir de toutes vos transactions jusqu'à fin{" "}
-              {MONTH_NAMES[selectedMonth - 1].toLowerCase()}
+              {alreadyClosed
+                ? `Solde enregistré au moment de la clôture de ${MONTH_NAMES[selectedMonth - 1].toLowerCase()}`
+                : `Calculé à partir de toutes vos transactions jusqu'à fin ${MONTH_NAMES[selectedMonth - 1].toLowerCase()}`}
             </Text>
           </Animated.View>
 
@@ -525,36 +528,56 @@ export default function ClotureMois() {
                     setSelectedYear(c.year);
                   }}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.historyMonth, { color }]}>
-                      {MONTH_NAMES[c.month - 1]} {c.year}
+                  {/* Titre du mois */}
+                  <Text style={[styles.historyMonth, { color, marginBottom: 10 }]}>
+                    {MONTH_NAMES[c.month - 1]} {c.year}
+                  </Text>
+
+                  {/* Ligne : Théorique */}
+                  <View style={styles.historyRow}>
+                    <Text style={[styles.historyRowLabel, { color: COLORS.gray }]}>
+                      Théorique
                     </Text>
-                    <Text
-                      style={{
-                        color: COLORS.gray,
-                        fontSize: 12,
-                        fontFamily: FONT_FAMILY.regular,
-                      }}
-                    >
-                      Physique : {displayAmount(Number(c.physical_balance))}
+                    <Text style={[styles.historyRowValue, { color }]}>
+                      {displayAmount(Number(c.theoretical_balance))}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.historyDiff,
-                      {
-                        color:
-                          c.difference > 0
-                            ? "#34C759"
-                            : c.difference < 0
-                              ? "#FF3B30"
-                              : COLORS.gray,
-                      },
-                    ]}
-                  >
-                    {c.difference > 0 ? "+" : ""}
-                    {displayAmount(Number(c.difference))}
-                  </Text>
+
+                  {/* Ligne : Physique */}
+                  <View style={styles.historyRow}>
+                    <Text style={[styles.historyRowLabel, { color: COLORS.gray }]}>
+                      Physique
+                    </Text>
+                    <Text style={[styles.historyRowValue, { color }]}>
+                      {displayAmount(Number(c.physical_balance))}
+                    </Text>
+                  </View>
+
+                  {/* Séparateur */}
+                  <View style={{ height: 1, backgroundColor: COLORS.gray + "20", marginVertical: 8 }} />
+
+                  {/* Ligne : Écart */}
+                  <View style={styles.historyRow}>
+                    <Text style={[styles.historyRowLabel, { color: COLORS.gray }]}>
+                      Écart
+                    </Text>
+                    <Text
+                      style={[
+                        styles.historyDiff,
+                        {
+                          color:
+                            c.difference > 0
+                              ? "#34C759"
+                              : c.difference < 0
+                                ? "#FF3B30"
+                                : COLORS.gray,
+                        },
+                      ]}
+                    >
+                      {c.difference > 0 ? "+" : ""}
+                      {displayAmount(Number(c.difference))}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -734,18 +757,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   historyItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
   },
   historyMonth: {
     fontSize: 14,
+    fontFamily: FONT_FAMILY.semibold,
+  },
+  historyRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  historyRowLabel: {
+    fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
+  },
+  historyRowValue: {
+    fontSize: 13,
     fontFamily: FONT_FAMILY.medium,
   },
   historyDiff: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: FONT_FAMILY.bold,
   },
 });

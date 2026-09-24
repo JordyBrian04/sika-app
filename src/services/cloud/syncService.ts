@@ -261,8 +261,10 @@ async function prepareForLocal(
     case "goal_streaks": {
       const goal_id = await getLocalId("saving_goals", r.goal_sync_id);
       if (!goal_id) return null;
+      // goal_streaks n'a pas de colonne created_at ni id — on les exclut
+      const { created_at: _ca, ...baseNoCreatedAt } = base;
       return {
-        ...base,
+        ...baseNoCreatedAt,
         current_streak: r.current_streak, best_streak: r.best_streak,
         last_success_week: r.last_success_week ?? null, goal_id,
       };
@@ -396,12 +398,15 @@ async function pullChanges(
             continue;
           }
 
-          const existing = await getOne<{ id: number }>(
-            `SELECT id FROM ${table} WHERE sync_id = ?`,
+          // Vérifier l'existence par COUNT — compatible avec toutes les tables
+          // (goal_streaks utilise goal_id comme PK, pas id)
+          const existsRow = await getOne<{ n: number }>(
+            `SELECT COUNT(*) as n FROM ${table} WHERE sync_id = ?`,
             [local.sync_id as string]
           );
+          const rowExists = (existsRow?.n ?? 0) > 0;
 
-          if (existing) {
+          if (rowExists) {
             // UPDATE — exclure id et sync_id de la mise à jour
             const { sync_id, id, ...updateCols } = local as any;
             const cols = Object.keys(updateCols);
@@ -413,7 +418,7 @@ async function pullChanges(
               [...values, sync_id]
             );
           } else {
-            // INSERT
+            // INSERT — exclure id (peut être absent pour les tables sans autoincrement)
             const { id: _id, ...insertCols } = local as any;
             const cols = Object.keys(insertCols);
             if (cols.length === 0) continue;
@@ -443,10 +448,25 @@ export type SyncResult = {
   ok: boolean;
   pushed: number;
   pulled: number;
+  pendingBefore?: number; // nombre de lignes en attente avant le sync
   error?: string;
   errors?: string[];
   synced_at?: string;
 };
+
+/** Compte les lignes locales en attente de sync */
+async function countPendingRows(): Promise<number> {
+  let total = 0;
+  for (const table of SYNCABLE_TABLES) {
+    try {
+      const row = await getOne<{ c: number }>(
+        `SELECT COUNT(*) as c FROM ${table} WHERE sync_status = 1 OR sync_id IS NULL`
+      );
+      total += row?.c ?? 0;
+    } catch {}
+  }
+  return total;
+}
 
 export async function fullSync(): Promise<SyncResult> {
   try {
@@ -457,16 +477,27 @@ export async function fullSync(): Promise<SyncResult> {
     );
     const lastSyncAt = lastSyncRow?.last_sync_at ?? null;
 
+    // Compter les lignes en attente AVANT le sync (pour afficher à l'utilisateur)
+    const pendingBefore = await countPendingRows();
+
     // 1. Push d'abord (envoyer nos changements)
     const pushResult = await pushPendingChanges(deviceId);
     if (pushResult.errors.length > 0) {
       console.warn("[sync] push warnings:", pushResult.errors);
     }
 
-    // Si erreur HTTP (pas de connexion, serveur down), arrêter
-    const httpError = pushResult.errors.find(e => e.includes("HTTP") || e.includes("réseau"));
-    if (pushResult.pushed === 0 && httpError) {
-      return { ok: false, pushed: 0, pulled: 0, error: httpError, errors: pushResult.errors };
+    // Si erreur côté push (serveur injoignable, réseau KO, HTTP error) → arrêter immédiatement
+    // On détecte toute erreur qui ressemble à un problème réseau ou HTTP
+    const pushNetworkError = pushResult.errors.find(e =>
+      e.includes("HTTP") ||
+      e.includes("réseau") ||
+      e.includes("Network") ||
+      e.includes("fetch") ||
+      e.includes("Failed to fetch") ||
+      e.includes("ECONNREFUSED")
+    );
+    if (pushNetworkError) {
+      return { ok: false, pushed: 0, pulled: 0, pendingBefore, error: pushNetworkError, errors: pushResult.errors };
     }
 
     // 2. Puis pull (récupérer les changements des autres appareils)
@@ -475,17 +506,26 @@ export async function fullSync(): Promise<SyncResult> {
       console.warn("[sync] pull warnings:", pullResult.errors);
     }
 
-    // 3. Sauvegarder le timestamp du serveur comme référence
-    const syncedAt = pullResult.synced_at ?? new Date().toISOString();
-    await runSql(`UPDATE user_profile SET last_sync_at = ? WHERE id = 1`, [syncedAt]);
+    // 3. Sauvegarder UNIQUEMENT le timestamp confirmé par le serveur.
+    // Ne jamais utiliser new Date() en fallback — cela ferait croire à un sync
+    // réussi alors que le serveur n'a pas été atteint.
+    if (pullResult.synced_at) {
+      await runSql(`UPDATE user_profile SET last_sync_at = ? WHERE id = 1`, [pullResult.synced_at]);
+    }
 
     const allErrors = [...pushResult.errors, ...pullResult.errors];
+    const serverReached = !!pullResult.synced_at;
+
+    // Si le pull a échoué, remonter l'erreur précise pour l'afficher dans l'UI
+    const pullError = pullResult.errors.length > 0 ? pullResult.errors[0] : undefined;
 
     return {
-      ok: true,
+      ok: serverReached,
       pushed: pushResult.pushed,
       pulled: pullResult.pulled,
-      synced_at: syncedAt,
+      pendingBefore,
+      synced_at: pullResult.synced_at,
+      error: serverReached ? undefined : (pullError ?? "Serveur inaccessible"),
       errors: allErrors.length > 0 ? allErrors : undefined,
     };
   } catch (e: any) {
@@ -496,6 +536,15 @@ export async function fullSync(): Promise<SyncResult> {
       error: e?.message ?? "Erreur inattendue lors du sync",
     };
   }
+}
+
+/**
+ * Réinitialise le timestamp de dernier sync et lance un sync complet.
+ * Utile quand last_sync_at est corrompu ou pour forcer un pull de toutes les données serveur.
+ */
+export async function resetAndFullSync(): Promise<SyncResult> {
+  await runSql(`UPDATE user_profile SET last_sync_at = NULL WHERE id = 1`);
+  return fullSync();
 }
 
 /** Marque un enregistrement comme "à synchroniser" */

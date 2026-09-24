@@ -13,6 +13,7 @@ import {
   dayWithMostIncome,
   ExpenseVsIncomePerPeriod,
   getTransactionsByPeriodAndCategory,
+  getIncomeByPeriodAndCategory,
 } from "@/src/db/repositories/statsRepo";
 import { requirePro } from "@/src/services/cloud/planCheck";
 import { getSymbol } from "@/src/services/currency/currencyStore";
@@ -67,6 +68,7 @@ export default function TabThreeScreen() {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
   const [barData, setBarData] = React.useState<any>([]);
   const [pieData, setPieData] = React.useState<any>([]);
+  const [pieIncomeData, setPieIncomeData] = React.useState<any>([]);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [yearArray, setYearArray] = useState<number[]>(generateYear());
   const [analyse, setAnalyse] = useState<any>([]);
@@ -261,6 +263,27 @@ export default function TabThreeScreen() {
       res.expense,
     );
     setPieData(datasPie);
+
+    const datasIncomePie = await getIncomeByPeriodAndCategory(
+      selectedIndex === 0
+        ? "dayly"
+        : selectedIndex === 1
+          ? "weekly"
+          : selectedIndex === 2
+            ? "monthly"
+            : "yearly",
+      selectedIndex === 0
+        ? statDatas.from
+        : selectedIndex === 1
+          ? `${toYYYYMMDD(new Date(statDatas.from))};${toYYYYMMDD(new Date(statDatas.to))}`
+          : selectedIndex === 2
+            ? currentMonth > 9
+              ? currentMonth.toString()
+              : `0${currentMonth}`
+            : currentYear.toString(),
+      res.income,
+    );
+    setPieIncomeData(datasIncomePie);
 
     let datas: any = [];
 
@@ -1073,6 +1096,30 @@ export default function TabThreeScreen() {
                   categorie={{
                     titre: "Afficher les détails",
                     content: pieData,
+                  }}
+                  onAccordionOpen={handleAccordionOpen}
+                />
+              </ThemedView>
+
+              {/* Entrées par catégorie */}
+              <ThemedView
+                lightColor={COLORS.white}
+                darkColor={COLORS.dark}
+                style={{ gap: 12, padding: 20, borderRadius: 12 }}
+              >
+                <ThemedText
+                  style={{ fontFamily: FONT_FAMILY.semibold, fontSize: 16 }}
+                >
+                  Entrées par catégories
+                </ThemedText>
+
+                {isReady && pieIncomeData.length > 0 && (
+                  <PieChartRender datas={pieIncomeData} />
+                )}
+                <Accordion
+                  categorie={{
+                    titre: "Afficher les détails",
+                    content: pieIncomeData,
                   }}
                   onAccordionOpen={handleAccordionOpen}
                 />

@@ -15,6 +15,7 @@ import {
   addContribution,
   deleteGoalContribution,
   listContributions,
+  withdrawContribution,
 } from "@/src/services/goals/contributions";
 import {
   deleteGoal,
@@ -113,7 +114,7 @@ const DetailGoal = () => {
     min_weekly: 0,
     min_monthly: 0,
   });
-  const [inputShown, setInputShown] = useState<"add_goal" | "add_contribution">(
+  const [inputShown, setInputShown] = useState<"add_goal" | "add_contribution" | "withdrawal">(
     "add_goal",
   );
   const [contribution, setContribution] = useState({
@@ -376,6 +377,36 @@ const DetailGoal = () => {
     }
   };
 
+  const handleWithdraw = async () => {
+    const withdrawAmount = parseFloat(contribution.amount);
+    if (!contribution.amount || withdrawAmount <= 0) {
+      alert("Veuillez entrer un montant valide.");
+      return;
+    }
+    const savedAmount = goalDetails?.saved_amount ?? 0;
+    if (withdrawAmount > savedAmount) {
+      alert(`Montant insuffisant. Solde épargné : ${displayAmount(savedAmount)}`);
+      return;
+    }
+    setLoading2(true);
+    try {
+      await withdrawContribution({
+        goal_id: id as any,
+        amount: withdrawAmount,
+        date: contribution.date,
+      });
+      closeModal();
+      setContribution({ amount: "0", date: new Date().toISOString().substring(0, 10) });
+      setAmount([]);
+      getDatas();
+    } catch (error) {
+      alert("Erreur lors du retrait.");
+      console.error("handleWithdraw error:", error);
+    } finally {
+      setLoading2(false);
+    }
+  };
+
   useEffect(() => {
     const start = selectedIndex * offset;
     const end = start + offset;
@@ -549,13 +580,15 @@ const DetailGoal = () => {
           padding: 8,
           width: 40,
           height: 40,
-          backgroundColor: COLORS.gray + "30",
+          backgroundColor: item.source === "withdrawal" ? COLORS.red + "20" : COLORS.gray + "30",
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 20,
         }}
       >
-        {item.source === "manual" ? (
+        {item.source === "withdrawal" ? (
+          <Feather name="arrow-up-left" size={18} color={COLORS.red} />
+        ) : item.source === "manual" ? (
           <FontAwesome6 name="money-bills" size={18} color={COLORS.gray} />
         ) : item.source === "roundup" ? (
           <FontAwesome name="circle" size={18} color={COLORS.gray} />
@@ -565,11 +598,13 @@ const DetailGoal = () => {
       </View>
       <View style={{ flex: 1 }}>
         <ThemedText style={{ fontSize: 14, fontFamily: FONT_FAMILY.semibold }}>
-          {item.source === "manual"
-            ? "Dépôt manuel"
-            : item.source === "roundup"
-              ? "Arrondi mensuel"
-              : "Virement automatique"}
+          {item.source === "withdrawal"
+            ? "Retrait"
+            : item.source === "manual"
+              ? "Dépôt manuel"
+              : item.source === "roundup"
+                ? "Arrondi mensuel"
+                : "Virement automatique"}
         </ThemedText>
         <Text
           style={{
@@ -589,10 +624,10 @@ const DetailGoal = () => {
         style={{
           fontSize: 14,
           fontFamily: FONT_FAMILY.semibold,
-          color: COLORS.green,
+          color: item.source === "withdrawal" ? COLORS.red : COLORS.green,
         }}
       >
-        {displayAmount(item.amount)}
+        {item.source === "withdrawal" ? "-" : "+"}{displayAmount(Math.abs(item.amount))}
       </Text>
     </TouchableOpacity>
   );
@@ -718,11 +753,20 @@ const DetailGoal = () => {
                 >
                   {inputShown === "add_goal"
                     ? "Nouvelle épargne"
-                    : "Nouvelle contribution pour : " +
-                      (selectedGoals ? selectedGoals.name : "")}
+                    : inputShown === "withdrawal"
+                      ? "Retirer de : " + (selectedGoals ? selectedGoals.name : "")
+                      : "Nouvelle contribution pour : " + (selectedGoals ? selectedGoals.name : "")}
                 </ThemedText>
 
-                {inputShown === "add_goal" ? (
+                {inputShown === "withdrawal" && goalDetails && (
+                  <View style={{ padding: 10, borderRadius: 12, backgroundColor: "#FF950020", borderWidth: 1, borderColor: "#FF9500" }}>
+                    <Text style={{ color: "#FF9500", fontFamily: FONT_FAMILY.medium, fontSize: 13 }}>
+                      Solde disponible : {displayAmount(goalDetails.saved_amount)}
+                    </Text>
+                  </View>
+                )}
+
+                {inputShown === "add_goal" && (
                   <>
                     <View style={{ gap: 18 }}>
                       {/* --- Nom (commun à tous les types) --- */}
@@ -1365,9 +1409,11 @@ const DetailGoal = () => {
                       )}
                     </TouchableOpacity>
                   </>
-                ) : (
+                )}
+
+                {(inputShown === "add_contribution" || inputShown === "withdrawal") && (
                   <>
-                    {selectedGoals && selectedGoals.status === "behind" && (
+                    {inputShown === "add_contribution" && selectedGoals && selectedGoals.status === "behind" && (
                       <View
                         style={{
                           padding: 12,
@@ -1714,14 +1760,14 @@ const DetailGoal = () => {
 
                     <TouchableOpacity
                       style={{
-                        backgroundColor: "#14b814",
+                        backgroundColor: inputShown === "withdrawal" ? "#FF9500" : "#14b814",
                         padding: 12,
                         borderRadius: 12,
                         alignItems: "center",
                         opacity: loading2 ? 0.7 : 1,
                       }}
                       disabled={loading2}
-                      onPress={handleSaveContribution}
+                      onPress={inputShown === "withdrawal" ? handleWithdraw : handleSaveContribution}
                     >
                       {loading2 ? (
                         <ActivityIndicator color="#fff" />
@@ -1732,7 +1778,7 @@ const DetailGoal = () => {
                             fontFamily: FONT_FAMILY.semibold,
                           }}
                         >
-                          Ajouter la contribution
+                          {inputShown === "withdrawal" ? "Retirer vers le compte principal" : "Ajouter la contribution"}
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -2014,57 +2060,84 @@ const DetailGoal = () => {
             gap: 12,
           }}
         >
-          <TouchableOpacity
-            style={{
-              backgroundColor: COLORS.green,
-              padding: 15,
-              borderRadius: 16,
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "row",
-              gap: 12,
-            }}
-            onPress={() => {
-              if (goals?.goal_type === "jar") {
-                // Tirelire : saisie libre directe
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: COLORS.green,
+                padding: 15,
+                borderRadius: 16,
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 12,
+                flex: 1,
+              }}
+              onPress={() => {
+                if (goals?.goal_type === "jar") {
+                  setSelectedGoals(goals);
+                  setInputShown("add_contribution");
+                  openModal("epargneModal");
+                } else {
+                  Alert.alert(
+                    "Épargner",
+                    "Épargner le montant défini ou un autre montant ?",
+                    [
+                      {
+                        text: "Montant défini",
+                        onPress: async () => {
+                          await addContribution({
+                            goal_id: id as any,
+                            amount: goals?.min_weekly,
+                            date: new Date().toISOString().substring(0, 10),
+                            source: "manual",
+                          });
+                          getDatas();
+                        },
+                      },
+                      {
+                        text: "Autre montant",
+                        onPress: () => {
+                          setSelectedGoals(goals);
+                          setInputShown("add_contribution");
+                          openModal("epargneModal");
+                        },
+                      },
+                    ],
+                  );
+                }
+              }}
+            >
+              <FontAwesome5 name="piggy-bank" size={22} color={COLORS.white} />
+              <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.white }}>
+                Épargner
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#FF9500",
+                padding: 15,
+                borderRadius: 16,
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 10,
+                flex: 1,
+              }}
+              onPress={() => {
                 setSelectedGoals(goals);
-                setInputShown("add_contribution");
+                setContribution({ amount: "0", date: new Date().toISOString().substring(0, 10) });
+                setAmount([]);
+                setInputShown("withdrawal");
                 openModal("epargneModal");
-              } else {
-                Alert.alert(
-                  "Épargner",
-                  "Épargner le montant défini ou un autre montant ?",
-                  [
-                    {
-                      text: "Montant défini",
-                      onPress: async () => {
-                        await addContribution({
-                          goal_id: id as any,
-                          amount: goals?.min_weekly,
-                          date: new Date().toISOString().substring(0, 10),
-                          source: "manual",
-                        });
-                        getDatas();
-                      },
-                    },
-                    {
-                      text: "Autre montant",
-                      onPress: () => {
-                        setSelectedGoals(goals);
-                        setInputShown("add_contribution");
-                        openModal("epargneModal");
-                      },
-                    },
-                  ],
-                );
-              }
-            }}
-          >
-            <FontAwesome5 name="piggy-bank" size={24} color={COLORS.white} />
-            <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.white }}>
-              Épargner
-            </Text>
-          </TouchableOpacity>
+              }}
+            >
+              <Feather name="arrow-up-left" size={22} color={COLORS.white} />
+              <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.white }}>
+                Retirer
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <View
             style={{

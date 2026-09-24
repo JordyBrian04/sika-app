@@ -53,10 +53,12 @@ export async function getTheoreticalBalance(
   const row = await getOne<{ balance: number }>(
     `SELECT
        COALESCE(SUM(CASE WHEN type = 'entree' THEN amount ELSE 0 END), 0)
-     - COALESCE(SUM(CASE WHEN type = 'depense' THEN amount ELSE 0 END), 0) as balance
+     - COALESCE(SUM(CASE WHEN type = 'depense' THEN amount ELSE 0 END), 0)
+     - (SELECT COALESCE(SUM(amount), 0) FROM goal_contributions WHERE date <= ?)
+     as balance
      FROM transactions
      WHERE date <= ?`,
-    [endDate],
+    [endDate, endDate],
   );
   return row?.balance ?? 0;
 }

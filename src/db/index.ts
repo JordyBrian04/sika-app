@@ -15,15 +15,8 @@ export async function runSql(
   params: SQLParams = [],
 ): Promise<void> {
   // const database = await getDb();
-  try {
-    const database = await getDb();
-
-    await database.runAsync(sql, params);
-
-  } catch (error) {
-    console.error("SQL ERROR:", error);
-    throw error;
-  }
+  const database = await getDb();
+  await database.runAsync(sql, params);
 }
 
 export async function all<T = any>(

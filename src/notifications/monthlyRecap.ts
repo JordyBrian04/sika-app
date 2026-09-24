@@ -13,11 +13,11 @@
  */
 
 import * as Notifications from "expo-notifications";
-import { MMKV } from "react-native-mmkv";
+import { createMMKV } from "react-native-mmkv";
 import { all, getOne } from "@/src/db";
 import { MONTHLY_CHANNEL_ID } from "./channels";
 
-const storage = new MMKV({ id: "monthly-recap" });
+const storage = createMMKV({ id: "monthly-recap" });
 const RECAP_KEY = "monthly_recap_sent";
 
 // ─── Helpers date ─────────────────────────────────────────────────────────────

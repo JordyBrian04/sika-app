@@ -7,9 +7,7 @@ import { getOne, runSql } from "@/src/db";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-export const API_BASE = __DEV__
-  ? "http://192.168.1.189:3000"
-  : "https://api.sika-app.org";
+export const API_BASE = "https://api.sika-app.org";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

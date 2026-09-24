@@ -12,7 +12,7 @@ export type GoalContribution = {
   amount: number;
   date: string;
   note: string | null;
-  source: "manual" | "roundup" | "auto";
+  source: "manual" | "roundup" | "auto" | "withdrawal";
 };
 
 export async function addContribution(input: {
@@ -54,6 +54,25 @@ export async function addContribution(input: {
   } catch (e) {
     console.warn("checkSavingBadges/checkGoalCompleted failed:", e);
   }
+}
+
+/**
+ * Retrait depuis un coffre/épargne vers le compte principal.
+ * Insère une contribution négative — réduit saved_amount et augmente le solde principal.
+ * Valider côté UI que amount <= saved_amount avant d'appeler.
+ */
+export async function withdrawContribution(input: {
+  goal_id: number;
+  amount: number;  // montant positif — sera stocké en négatif
+  date?: string;
+  note?: string | null;
+}) {
+  const date = input.date ?? toYYYYMMDD(new Date());
+  await runSql(
+    `INSERT INTO goal_contributions (goal_id, amount, date, note, source)
+     VALUES (?, ?, ?, ?, ?)`,
+    [input.goal_id, -Math.abs(input.amount), date, input.note ?? "Retrait", "withdrawal"],
+  );
 }
 
 export async function listContributions(goal_id: number, limit = 50) {

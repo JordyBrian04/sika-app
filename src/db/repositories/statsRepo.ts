@@ -532,3 +532,90 @@ export async function getTransactionsByPeriodAndCategory(
 
   return pieDatas;
 }
+
+export async function getIncomeByPeriodAndCategory(
+  periodeType: "dayly" | "monthly" | "yearly" | "weekly",
+  periodeValue: string,
+  totalIncome: number,
+) {
+  let result: any;
+  const categories = await all<CategoryInput>(
+    `SELECT id, name FROM categories WHERE type = 'entree' ORDER BY name ASC`,
+  );
+  const pieDatas: any = [];
+  let maxPercent = -1;
+  let focusedIndex = -1;
+
+  switch (periodeType) {
+    case "dayly":
+      for (let i = 0; i < categories.length; i++) {
+        const cat = categories[i];
+        let row = { label: cat.name, value: 0, color: generateRandomColor(), gradientCenterColor: generateRandomColor(), focused: false, amount: 0 };
+        result = await getOne<{ total: number }>(
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'entree' AND date = ? AND category_id = ?`,
+          [periodeValue, cat.id],
+        );
+        const total = result?.total || 0;
+        const percent = totalIncome > 0 ? Math.round((total / totalIncome) * 100) : 0;
+        if (result && result.total) { row.value = Math.round((result.total / totalIncome) * 100); row.amount = result.total; }
+        if (percent > maxPercent && percent > 0) { maxPercent = percent; focusedIndex = i; }
+        pieDatas.push(row);
+        if (focusedIndex !== -1) { pieDatas[focusedIndex].focused = true; }
+      }
+      break;
+    case "weekly":
+      const start = new Date(periodeValue.split(";")[0]);
+      const end = new Date(periodeValue.split(";")[1]);
+      for (let i = 0; i < categories.length; i++) {
+        const cat = categories[i];
+        let row = { label: cat.name, value: 0, color: generateRandomColor(), gradientCenterColor: generateRandomColor(), focused: false, amount: 0 };
+        result = await getOne<{ total: number }>(
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'entree' AND date >= ? AND date <= ? AND category_id = ?`,
+          [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10), cat.id],
+        );
+        const total = result?.total || 0;
+        const percent = totalIncome > 0 ? Math.round((total / totalIncome) * 100) : 0;
+        if (result && result.total) { row.value = Math.round((result.total / totalIncome) * 100); row.amount = result.total; }
+        if (percent > maxPercent && percent > 0) { maxPercent = percent; focusedIndex = i; }
+        pieDatas.push(row);
+        if (focusedIndex !== -1) { pieDatas[focusedIndex].focused = true; }
+      }
+      break;
+    case "monthly":
+      const year = new Date().getFullYear();
+      const month = parseInt(periodeValue);
+      for (let i = 0; i < categories.length; i++) {
+        const cat = categories[i];
+        let row = { label: cat.name, value: 0, color: generateRandomColor(), gradientCenterColor: generateRandomColor(), focused: false, amount: 0 };
+        result = await getOne<{ total: number }>(
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'entree' AND strftime('%m', date) = ? AND strftime('%Y', date) = ? AND category_id = ?`,
+          [month.toString().padStart(2, "0"), year.toString(), cat.id],
+        );
+        const total = result?.total || 0;
+        const percent = totalIncome > 0 ? Math.round((total / totalIncome) * 100) : 0;
+        if (result && result.total) { row.value = Math.round((result.total / totalIncome) * 100); row.amount = result.total; }
+        if (percent > maxPercent && percent > 0) { maxPercent = percent; focusedIndex = i; }
+        pieDatas.push(row);
+        if (focusedIndex !== -1) { pieDatas[focusedIndex].focused = true; }
+      }
+      break;
+    case "yearly":
+      for (let i = 0; i < categories.length; i++) {
+        const cat = categories[i];
+        let row = { label: cat.name, value: 0, color: generateRandomColor(), gradientCenterColor: generateRandomColor(), focused: false, amount: 0 };
+        result = await getOne<{ total: number }>(
+          `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'entree' AND strftime('%Y', date) = ? AND category_id = ?`,
+          [periodeValue.toString(), cat.id],
+        );
+        const total = result?.total || 0;
+        const percent = totalIncome > 0 ? Math.round((total / totalIncome) * 100) : 0;
+        if (result && result.total) { row.value = Math.round((result.total / totalIncome) * 100); row.amount = result.total; }
+        if (percent > maxPercent && percent > 0) { maxPercent = percent; focusedIndex = i; }
+        pieDatas.push(row);
+        if (focusedIndex !== -1) { pieDatas[focusedIndex].focused = true; }
+      }
+      break;
+  }
+
+  return pieDatas;
+}

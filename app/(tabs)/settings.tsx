@@ -17,7 +17,7 @@ import {
 } from "@/src/services/cloud/authService";
 import { cancelSubscription, syncSubscriptionStatus } from "@/src/services/cloud/paymentService";
 import { requirePro } from "@/src/services/cloud/planCheck";
-import { fullSync, SyncResult } from "@/src/services/cloud/syncService";
+import { fullSync, resetAndFullSync, SyncResult } from "@/src/services/cloud/syncService";
 import { SETUP_CURRENCIES } from "@/src/services/currency/currencyService";
 import { getProfile, LevelInfo } from "@/src/services/gamification/xpService";
 import { generateMonthlyPDF, generateShareCard } from "@/src/services/reports/reportService";
@@ -177,15 +177,53 @@ export default function TabFiveScreen() {
     const result: SyncResult = await fullSync();
     setSyncing(false);
     if (result.ok) {
-      Alert.alert(
-        "Sync réussie ✅",
-        `${result.pushed} envoyés · ${result.pulled} reçus`,
-      );
+      const syncedAt = result.synced_at
+        ? new Date(result.synced_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+        : null;
+      const nothingToSync = result.pushed === 0 && result.pulled === 0;
+      const msg = nothingToSync
+        ? `Tout est à jour ✓\nAucune donnée à échanger.${syncedAt ? `\nServeur contacté à ${syncedAt}.` : ""}`
+        : `${result.pushed} envoyés · ${result.pulled} reçus${syncedAt ? `\nSynchronisé à ${syncedAt}` : ""}`;
+
+      Alert.alert("Sync réussie ✅", msg, [
+        { text: "OK" },
+        ...(nothingToSync ? [{
+          text: "Forcer resync complet",
+          onPress: handleForceResync,
+        }] : []),
+      ]);
       // Rafraîchir le profil cloud pour la date de dernier sync
       const cloud = await getCloudProfile();
       setCloudProfile(cloud);
     } else {
-      Alert.alert("Erreur de sync", result.error ?? "Réessaie plus tard.");
+      const detail = result.error
+        ?? result.errors?.join("\n")
+        ?? "Serveur inaccessible ou session expirée.";
+      Alert.alert("Erreur de sync ❌", detail, [
+        { text: "OK" },
+        {
+          text: "Forcer resync complet",
+          onPress: handleForceResync,
+        },
+      ]);
+    }
+  };
+
+  const handleForceResync = async () => {
+    if (!(await requirePro("La synchronisation cloud"))) return;
+    setSyncing(true);
+    const result: SyncResult = await resetAndFullSync();
+    setSyncing(false);
+    if (result.ok) {
+      Alert.alert(
+        "Resync complet ✅",
+        `${result.pushed} envoyés · ${result.pulled} reçus depuis le serveur.`,
+      );
+      const cloud = await getCloudProfile();
+      setCloudProfile(cloud);
+    } else {
+      const detail = result.error ?? "Serveur inaccessible ou session expirée.";
+      Alert.alert("Erreur de resync ❌", detail);
     }
   };
 
