@@ -22,7 +22,7 @@ import { autoCheckNoSpendDay } from "@/src/services/missions/noSpendDay";
 import { ensureWeeklyPackAI } from "@/src/services/missions/weeklyAI";
 import { FONT_FAMILY } from "@/src/theme/fonts";
 import { useAppTextColor } from "@/src/utils/colos";
-import { diffDays, toYYYYMMDD } from "@/src/utils/goalDates";
+import { diffDays } from "@/src/utils/goalDates";
 import {
     Feather,
     FontAwesome6,
@@ -270,7 +270,10 @@ export default function TabFourScreen() {
   };
 
   const confirmIOSDate4 = () => {
-    setPeriodicData((prev) => ({ ...prev, target_date: toLocalISODate(date4) }));
+    setPeriodicData((prev) => ({
+      ...prev,
+      target_date: toLocalISODate(date4),
+    }));
     setOpen4(false);
   };
 
@@ -308,6 +311,8 @@ export default function TabFourScreen() {
     let dejaEpargne = 0;
     for (const g of allGoalsForTotal) {
       const details = await getGoalPlan(g.id);
+      console.log(g);
+      if (g.active === 0) continue; // On ne compte pas les goals clôturés
       dejaEpargne += details.saved_amount;
     }
     setTotalEpargne(dejaEpargne);
@@ -321,7 +326,9 @@ export default function TabFourScreen() {
           ...g,
           details,
           percentage:
-            g.goal_type === "jar" ? 0 : animate(details.saved_amount, g.target_amount),
+            g.goal_type === "jar"
+              ? 0
+              : animate(details.saved_amount, g.target_amount),
         };
       }),
     );
@@ -416,20 +423,32 @@ export default function TabFourScreen() {
   // Calcul projection type Périodique
   useEffect(() => {
     const { target_date, amount_per_period, frequence } = periodicData;
-    if (!target_date || !amount_per_period || parseFloat(amount_per_period) <= 0) {
+    if (
+      !target_date ||
+      !amount_per_period ||
+      parseFloat(amount_per_period) <= 0
+    ) {
       setPeriodicProjection(0);
       return;
     }
     const today = new Date();
     const end = new Date(target_date);
-    if (end <= today) { setPeriodicProjection(0); return; }
+    if (end <= today) {
+      setPeriodicProjection(0);
+      return;
+    }
     const totalDays = Math.max(diffDays(end, today), 0);
     let periods = 1;
     if (frequence === "daily") periods = Math.max(totalDays, 1);
-    else if (frequence === "weekly") periods = Math.max(Math.ceil(totalDays / 7), 1);
+    else if (frequence === "weekly")
+      periods = Math.max(Math.ceil(totalDays / 7), 1);
     else periods = Math.max(Math.ceil(totalDays / 30), 1);
     setPeriodicProjection(Math.ceil(parseFloat(amount_per_period) * periods));
-  }, [periodicData.target_date, periodicData.amount_per_period, periodicData.frequence]);
+  }, [
+    periodicData.target_date,
+    periodicData.amount_per_period,
+    periodicData.frequence,
+  ]);
 
   const handleSave = async () => {
     setLoading2(true);
@@ -460,9 +479,15 @@ export default function TabFourScreen() {
           alert("Veuillez remplir tous les champs correctement.");
           return;
         }
-        const targetFCFA = await toFCFA(parseFloat(epargneData.target_amount) || 0);
-        const currentFCFA = await toFCFA(parseFloat(epargneData.current_amount) || 0);
-        const minWeeklyFCFA = await toFCFA(parseFloat(epargneData.min_weekly) || 0);
+        const targetFCFA = await toFCFA(
+          parseFloat(epargneData.target_amount) || 0,
+        );
+        const currentFCFA = await toFCFA(
+          parseFloat(epargneData.current_amount) || 0,
+        );
+        const minWeeklyFCFA = await toFCFA(
+          parseFloat(epargneData.min_weekly) || 0,
+        );
         const goalId = await createGoal({
           name: epargneData.name,
           target_amount: targetFCFA,
@@ -494,7 +519,7 @@ export default function TabFourScreen() {
         });
         setPeriodeDAtats({ min_dayly: 0, min_weekly: 0, min_monthly: 0 });
 
-      // ---- TYPE PÉRIODIQUE (nouveau) ----
+        // ---- TYPE PÉRIODIQUE (nouveau) ----
       } else if (selectedIndex === 1) {
         if (
           !periodicData.name ||
@@ -506,29 +531,38 @@ export default function TabFourScreen() {
           alert("Veuillez remplir tous les champs correctement.");
           return;
         }
-        const amountFCFA = await toFCFA(parseFloat(periodicData.amount_per_period));
+        const amountFCFA = await toFCFA(
+          parseFloat(periodicData.amount_per_period),
+        );
         const projFCFA = await toFCFA(periodicProjection);
         await createGoal({
           name: periodicData.name,
-          target_amount: projFCFA,           // montant projeté = target
-          min_weekly: amountFCFA,             // montant par période
+          target_amount: projFCFA, // montant projeté = target
+          min_weekly: amountFCFA, // montant par période
           target_date: periodicData.target_date,
           start_date: new Date().toISOString().substring(0, 10),
           frequence: periodicData.frequence,
           priority: "medium",
           goal_type: "periodic",
         });
-        setPeriodicData({ name: "", amount_per_period: "0", target_date: "", frequence: "weekly" });
+        setPeriodicData({
+          name: "",
+          amount_per_period: "0",
+          target_date: "",
+          frequence: "weekly",
+        });
         setPeriodicProjection(0);
 
-      // ---- TYPE TIRELIRE (nouveau) ----
+        // ---- TYPE TIRELIRE (nouveau) ----
       } else {
         if (!jarData.name) {
           setLoading2(false);
           alert("Veuillez entrer un nom pour la tirelire.");
           return;
         }
-        const initialFCFA = await toFCFA(parseFloat(jarData.initial_amount) || 0);
+        const initialFCFA = await toFCFA(
+          parseFloat(jarData.initial_amount) || 0,
+        );
         const goalId = await createGoal({
           name: jarData.name,
           target_amount: 0,
@@ -553,7 +587,9 @@ export default function TabFourScreen() {
       toggleSheet();
       getDatas();
     } catch (error) {
-      alert("Une erreur est survenue lors de la création de l'épargne. Veuillez réessayer.");
+      alert(
+        "Une erreur est survenue lors de la création de l'épargne. Veuillez réessayer.",
+      );
       console.error("Error creating goal:", error);
     } finally {
       setLoading2(false);
@@ -928,8 +964,15 @@ export default function TabFourScreen() {
                         })
                       }
                     >
-                          {/* --- En-tête carte --- */}
-                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      {/* --- En-tête carte --- */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                        }}
+                      >
                         {/* Progressbar seulement pour objective et periodic */}
                         {item.goal_type !== "jar" ? (
                           <CircularProgressBar
@@ -939,42 +982,131 @@ export default function TabFourScreen() {
                             end={item.percentage / 100}
                           />
                         ) : (
-                          <View style={{ width: R * 2, height: R * 2, borderRadius: R, borderWidth: STROKE_WIDTH, borderColor: COLORS.primary + "50", alignItems: "center", justifyContent: "center" }}>
-                            <MaterialIcons name="savings" size={32} color={COLORS.primary} />
+                          <View
+                            style={{
+                              width: R * 2,
+                              height: R * 2,
+                              borderRadius: R,
+                              borderWidth: STROKE_WIDTH,
+                              borderColor: COLORS.primary + "50",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <MaterialIcons
+                              name="savings"
+                              size={32}
+                              color={COLORS.primary}
+                            />
                           </View>
                         )}
 
                         <View style={{ flex: 1, gap: 4 }}>
-                          <ThemedText style={{ fontFamily: FONT_FAMILY.bold, fontSize: 18 }}>
+                          <ThemedText
+                            style={{
+                              fontFamily: FONT_FAMILY.bold,
+                              fontSize: 18,
+                            }}
+                          >
                             {item.name}
                           </ThemedText>
 
                           {item.goal_type === "jar" ? (
-                            <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray, fontSize: 12 }}>
-                              Épargné : {displayAmount(item.details.saved_amount)}
+                            <Text
+                              style={{
+                                fontFamily: FONT_FAMILY.medium,
+                                color: COLORS.gray,
+                                fontSize: 12,
+                              }}
+                            >
+                              Épargné :{" "}
+                              {displayAmount(item.details.saved_amount)}
                             </Text>
                           ) : (
                             <>
-                              <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray, fontSize: 12 }}>
-                                Reste {displayAmount(item.details.remaining_amount)} sur {displayAmount(item.target_amount)}
+                              <Text
+                                style={{
+                                  fontFamily: FONT_FAMILY.medium,
+                                  color: COLORS.gray,
+                                  fontSize: 12,
+                                }}
+                              >
+                                Reste{" "}
+                                {displayAmount(item.details.remaining_amount)}{" "}
+                                sur {displayAmount(item.target_amount)}
                               </Text>
-                              {item.goal_type !== "jar" && item.target_date !== "9999-12-31" && (
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                  <Fontisto name="wallet" size={14} color={COLORS.gray} />
-                                  <Text style={{ fontFamily: FONT_FAMILY.medium, color: COLORS.gray, fontSize: 12 }}>
-                                    Échéance :{" "}
-                                    {new Date(item.target_date).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-                                  </Text>
-                                </View>
-                              )}
+                              {item.goal_type !== "jar" &&
+                                item.target_date !== "9999-12-31" && (
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 4,
+                                    }}
+                                  >
+                                    <Fontisto
+                                      name="wallet"
+                                      size={14}
+                                      color={COLORS.gray}
+                                    />
+                                    <Text
+                                      style={{
+                                        fontFamily: FONT_FAMILY.medium,
+                                        color: COLORS.gray,
+                                        fontSize: 12,
+                                      }}
+                                    >
+                                      Échéance :{" "}
+                                      {new Date(
+                                        item.target_date,
+                                      ).toLocaleDateString("fr-FR", {
+                                        month: "long",
+                                        year: "numeric",
+                                      })}
+                                    </Text>
+                                  </View>
+                                )}
                             </>
                           )}
 
                           {/* Badge type */}
-                          <View style={{ flexDirection: "row", gap: 4, flexWrap: "wrap" }}>
-                            <View style={{ backgroundColor: item.goal_type === "objective" ? COLORS.primary + "20" : item.goal_type === "periodic" ? "#f59e0b20" : COLORS.green + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
-                              <Text style={{ fontFamily: FONT_FAMILY.medium, fontSize: 11, color: item.goal_type === "objective" ? COLORS.primary : item.goal_type === "periodic" ? "#f59e0b" : COLORS.green }}>
-                                {item.goal_type === "objective" ? "Objectif" : item.goal_type === "periodic" ? "Périodique" : "Tirelire"}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              gap: 4,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <View
+                              style={{
+                                backgroundColor:
+                                  item.goal_type === "objective"
+                                    ? COLORS.primary + "20"
+                                    : item.goal_type === "periodic"
+                                      ? "#f59e0b20"
+                                      : COLORS.green + "20",
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                borderRadius: 10,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontFamily: FONT_FAMILY.medium,
+                                  fontSize: 11,
+                                  color:
+                                    item.goal_type === "objective"
+                                      ? COLORS.primary
+                                      : item.goal_type === "periodic"
+                                        ? "#f59e0b"
+                                        : COLORS.green,
+                                }}
+                              >
+                                {item.goal_type === "objective"
+                                  ? "Objectif"
+                                  : item.goal_type === "periodic"
+                                    ? "Périodique"
+                                    : "Tirelire"}
                               </Text>
                             </View>
                           </View>
@@ -985,7 +1117,16 @@ export default function TabFourScreen() {
                       <View style={{ flexDirection: "row", gap: 8 }}>
                         {/* Bouton Épargner */}
                         <TouchableOpacity
-                          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, padding: 12, backgroundColor: COLORS.green, borderRadius: 8, justifyContent: "center" }}
+                          style={{
+                            flex: 1,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: 12,
+                            backgroundColor: COLORS.green,
+                            borderRadius: 8,
+                            justifyContent: "center",
+                          }}
                           onPress={() => {
                             if (item.goal_type === "jar") {
                               // Tirelire : saisie libre directe
@@ -1004,7 +1145,9 @@ export default function TabFourScreen() {
                                       await addContribution({
                                         goal_id: item.id,
                                         amount: item.min_weekly,
-                                        date: new Date().toISOString().substring(0, 10),
+                                        date: new Date()
+                                          .toISOString()
+                                          .substring(0, 10),
                                         source: "manual",
                                       });
                                       getDatas();
@@ -1023,13 +1166,34 @@ export default function TabFourScreen() {
                             }
                           }}
                         >
-                          <MaterialIcons name="savings" size={20} color="white" />
-                          <Text style={{ color: "white", fontFamily: FONT_FAMILY.semibold, fontSize: 14 }}>Épargner</Text>
+                          <MaterialIcons
+                            name="savings"
+                            size={20}
+                            color="white"
+                          />
+                          <Text
+                            style={{
+                              color: "white",
+                              fontFamily: FONT_FAMILY.semibold,
+                              fontSize: 14,
+                            }}
+                          >
+                            Épargner
+                          </Text>
                         </TouchableOpacity>
 
                         {/* Bouton Clôture */}
                         <TouchableOpacity
-                          style={{ paddingHorizontal: 12, paddingVertical: 12, backgroundColor: "#ef444420", borderRadius: 8, borderWidth: 1, borderColor: "#ef4444", alignItems: "center", justifyContent: "center" }}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 12,
+                            backgroundColor: "#ef444420",
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: "#ef4444",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
                           onPress={() => handleCloseGoal(item)}
                         >
                           <Feather name="x-circle" size={20} color="#ef4444" />
@@ -1683,43 +1847,96 @@ export default function TabFourScreen() {
                     <TextInput
                       placeholder="Ex: Épargne voyage"
                       placeholderTextColor={COLORS.gray}
-                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
                       value={periodicData.name}
-                      onChangeText={(e) => setPeriodicData((prev) => ({ ...prev, name: e }))}
+                      onChangeText={(e) =>
+                        setPeriodicData((prev) => ({ ...prev, name: e }))
+                      }
                     />
                   </View>
 
                   <View style={{ gap: 8 }}>
-                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant par période (${getSymbol()})`}</ThemedText>
+                    <ThemedText
+                      style={{ fontFamily: FONT_FAMILY.semibold }}
+                    >{`Montant par période (${getSymbol()})`}</ThemedText>
                     <TextInput
                       placeholder="Ex: 5000"
                       placeholderTextColor={COLORS.gray}
                       keyboardType="numeric"
-                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
                       value={periodicData.amount_per_period}
-                      onChangeText={(e) => setPeriodicData((prev) => ({ ...prev, amount_per_period: e }))}
+                      onChangeText={(e) =>
+                        setPeriodicData((prev) => ({
+                          ...prev,
+                          amount_per_period: e,
+                        }))
+                      }
                     />
                   </View>
 
                   <View style={{ gap: 8 }}>
-                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>Date de fin</ThemedText>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Date de fin
+                    </ThemedText>
                     {open4 && (
                       <DateTimePicker
                         mode="date"
                         display="spinner"
-                        value={periodicData.target_date ? parseLocalDate(periodicData.target_date) : new Date()}
+                        value={
+                          periodicData.target_date
+                            ? parseLocalDate(periodicData.target_date)
+                            : new Date()
+                        }
                         onChange={onChange4}
                         style={{ height: 120, marginTop: 20, width: "100%" }}
                         textColor={color}
                       />
                     )}
                     {open4 && Platform.OS === "ios" && (
-                      <View style={{ flexDirection: "row", justifyContent: "space-around", marginBottom: 20 }}>
-                        <TouchableOpacity style={{ padding: 10, backgroundColor: "gray", borderRadius: 10 }} onPress={toggleDatePicker4}>
-                          <Text style={{ color: "black", fontWeight: "bold" }}>Annuler</Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-around",
+                          marginBottom: 20,
+                        }}
+                      >
+                        <TouchableOpacity
+                          style={{
+                            padding: 10,
+                            backgroundColor: "gray",
+                            borderRadius: 10,
+                          }}
+                          onPress={toggleDatePicker4}
+                        >
+                          <Text style={{ color: "black", fontWeight: "bold" }}>
+                            Annuler
+                          </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ padding: 10, backgroundColor: "gray", borderRadius: 10 }} onPress={confirmIOSDate4}>
-                          <Text style={{ color: "black", fontWeight: "bold" }}>Valider</Text>
+                        <TouchableOpacity
+                          style={{
+                            padding: 10,
+                            backgroundColor: "gray",
+                            borderRadius: 10,
+                          }}
+                          onPress={confirmIOSDate4}
+                        >
+                          <Text style={{ color: "black", fontWeight: "bold" }}>
+                            Valider
+                          </Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -1728,7 +1945,15 @@ export default function TabFourScreen() {
                         <TextInput
                           placeholder="Date de fin"
                           placeholderTextColor={COLORS.gray}
-                          style={{ borderWidth: 1, borderColor: COLORS.gray, padding: 10, borderRadius: 10, color: color, fontFamily: FONT_FAMILY.regular, height: 52 }}
+                          style={{
+                            borderWidth: 1,
+                            borderColor: COLORS.gray,
+                            padding: 10,
+                            borderRadius: 10,
+                            color: color,
+                            fontFamily: FONT_FAMILY.regular,
+                            height: 52,
+                          }}
                           editable={false}
                           value={periodicData.target_date}
                           onPressIn={toggleDatePicker4}
@@ -1738,27 +1963,52 @@ export default function TabFourScreen() {
                   </View>
 
                   <View style={{ gap: 8 }}>
-                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>Fréquence d'épargne</ThemedText>
+                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>
+                      Fréquence d'épargne
+                    </ThemedText>
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      {([
-                        { key: "daily", label: "Journalière" },
-                        { key: "weekly", label: "Hebdo" },
-                        { key: "monthly", label: "Mensuelle" },
-                      ] as const).map((opt) => (
+                      {(
+                        [
+                          { key: "daily", label: "Journalière" },
+                          { key: "weekly", label: "Hebdo" },
+                          { key: "monthly", label: "Mensuelle" },
+                        ] as const
+                      ).map((opt) => (
                         <TouchableOpacity
                           key={opt.key}
                           style={{
                             flex: 1,
                             padding: 10,
                             borderRadius: 10,
-                            borderWidth: periodicData.frequence === opt.key ? 2 : 1,
-                            borderColor: periodicData.frequence === opt.key ? COLORS.green : COLORS.gray,
-                            backgroundColor: periodicData.frequence === opt.key ? COLORS.green + "20" : "transparent",
+                            borderWidth:
+                              periodicData.frequence === opt.key ? 2 : 1,
+                            borderColor:
+                              periodicData.frequence === opt.key
+                                ? COLORS.green
+                                : COLORS.gray,
+                            backgroundColor:
+                              periodicData.frequence === opt.key
+                                ? COLORS.green + "20"
+                                : "transparent",
                             alignItems: "center",
                           }}
-                          onPress={() => setPeriodicData((prev) => ({ ...prev, frequence: opt.key }))}
+                          onPress={() =>
+                            setPeriodicData((prev) => ({
+                              ...prev,
+                              frequence: opt.key,
+                            }))
+                          }
                         >
-                          <Text style={{ fontFamily: FONT_FAMILY.medium, color: periodicData.frequence === opt.key ? COLORS.green : color, fontSize: 12 }}>
+                          <Text
+                            style={{
+                              fontFamily: FONT_FAMILY.medium,
+                              color:
+                                periodicData.frequence === opt.key
+                                  ? COLORS.green
+                                  : color,
+                              fontSize: 12,
+                            }}
+                          >
                             {opt.label}
                           </Text>
                         </TouchableOpacity>
@@ -1767,18 +2017,56 @@ export default function TabFourScreen() {
                   </View>
 
                   {periodicProjection > 0 && (
-                    <View style={{ padding: 12, borderWidth: 1, borderColor: COLORS.green, borderRadius: 12, backgroundColor: COLORS.green + "20", gap: 4 }}>
-                      <Text style={{ fontFamily: FONT_FAMILY.semibold, color: COLORS.green, fontSize: 13 }}>Montant total projeté</Text>
-                      <Text style={{ fontFamily: FONT_FAMILY.bold, fontSize: 22, color: COLORS.green }}>
+                    <View
+                      style={{
+                        padding: 12,
+                        borderWidth: 1,
+                        borderColor: COLORS.green,
+                        borderRadius: 12,
+                        backgroundColor: COLORS.green + "20",
+                        gap: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: FONT_FAMILY.semibold,
+                          color: COLORS.green,
+                          fontSize: 13,
+                        }}
+                      >
+                        Montant total projeté
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FONT_FAMILY.bold,
+                          fontSize: 22,
+                          color: COLORS.green,
+                        }}
+                      >
                         {formatInCurrency(periodicProjection)}
                       </Text>
-                      <Text style={{ fontFamily: FONT_FAMILY.regular, color: COLORS.gray, fontSize: 12 }}>
-                        En épargnant {formatInCurrency(parseFloat(periodicData.amount_per_period) || 0)} par {periodicData.frequence === "daily" ? "jour" : periodicData.frequence === "weekly" ? "semaine" : "mois"} jusqu'au {periodicData.target_date}
+                      <Text
+                        style={{
+                          fontFamily: FONT_FAMILY.regular,
+                          color: COLORS.gray,
+                          fontSize: 12,
+                        }}
+                      >
+                        En épargnant{" "}
+                        {formatInCurrency(
+                          parseFloat(periodicData.amount_per_period) || 0,
+                        )}{" "}
+                        par{" "}
+                        {periodicData.frequence === "daily"
+                          ? "jour"
+                          : periodicData.frequence === "weekly"
+                            ? "semaine"
+                            : "mois"}{" "}
+                        jusqu'au {periodicData.target_date}
                       </Text>
                     </View>
                   )}
                 </View>
-
               ) : (
                 /* ===== TIRELIRE ===== */
                 <View style={{ gap: 18 }}>
@@ -1789,25 +2077,59 @@ export default function TabFourScreen() {
                     <TextInput
                       placeholder="Ex: Tirelire famille"
                       placeholderTextColor={COLORS.gray}
-                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
                       value={jarData.name}
-                      onChangeText={(e) => setJarData((prev) => ({ ...prev, name: e }))}
+                      onChangeText={(e) =>
+                        setJarData((prev) => ({ ...prev, name: e }))
+                      }
                     />
                   </View>
                   <View style={{ gap: 8 }}>
-                    <ThemedText style={{ fontFamily: FONT_FAMILY.semibold }}>{`Montant initial (${getSymbol()})`}</ThemedText>
+                    <ThemedText
+                      style={{ fontFamily: FONT_FAMILY.semibold }}
+                    >{`Montant initial (${getSymbol()})`}</ThemedText>
                     <TextInput
                       placeholder="Ex: 0"
                       placeholderTextColor={COLORS.gray}
                       keyboardType="numeric"
-                      style={{ padding: 16, borderWidth: 1, borderColor: COLORS.gray, color: color, borderRadius: 8, fontFamily: FONT_FAMILY.regular }}
+                      style={{
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: COLORS.gray,
+                        color: color,
+                        borderRadius: 8,
+                        fontFamily: FONT_FAMILY.regular,
+                      }}
                       value={jarData.initial_amount}
-                      onChangeText={(e) => setJarData((prev) => ({ ...prev, initial_amount: e }))}
+                      onChangeText={(e) =>
+                        setJarData((prev) => ({ ...prev, initial_amount: e }))
+                      }
                     />
                   </View>
-                  <View style={{ padding: 12, borderRadius: 12, backgroundColor: COLORS.gray + "20", gap: 4 }}>
-                    <Text style={{ fontFamily: FONT_FAMILY.regular, color: COLORS.gray, fontSize: 13 }}>
-                      La tirelire n'a pas de montant cible ni de date. Tu y déposes ce que tu veux, quand tu veux.
+                  <View
+                    style={{
+                      padding: 12,
+                      borderRadius: 12,
+                      backgroundColor: COLORS.gray + "20",
+                      gap: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONT_FAMILY.regular,
+                        color: COLORS.gray,
+                        fontSize: 13,
+                      }}
+                    >
+                      La tirelire n'a pas de montant cible ni de date. Tu y
+                      déposes ce que tu veux, quand tu veux.
                     </Text>
                   </View>
                 </View>
